@@ -253,24 +253,24 @@
 <!-- ── 1. INTRO ──────────────────────────────────────────────────── -->
 <h2>Why I Decided to Build an LLM from Scratch</h2>
 
-<p>Let me be honest with you: when I first heard people say "I trained my own language model," it sounded like witchcraft. ChatGPT, GPT-4, LLaMA — these things have <em>billions</em> of parameters and cost millions to train. How could anyone build one at home?</p>
+<p>Okay, I'll be honest — when I first heard people say "I trained my own language model," I thought they were full of it. Or maybe just really, really rich. ChatGPT, GPT-4, LLaMA — these things have <em>billions</em> of parameters and cost millions to train. Who's doing that in their spare time?</p>
 
-<p>But here's the thing that changed my perspective: <strong>the core ideas behind these models are surprisingly elegant.</strong> The math isn't alien. The architecture fits in a few hundred lines of Python. And you absolutely can build a tiny version on your laptop — one that actually learns to produce (vaguely) coherent text — in under two minutes.</p>
+<p>But then I started actually reading about how they work, and... huh. Turns out <strong>the core ideas are way more approachable than I expected.</strong> Not easy, exactly, but not the scary PhD-level math I'd imagined. The whole architecture fits in a few hundred lines of Python. And you can genuinely build a tiny version on your laptop that learns to produce (vaguely) coherent text in under two minutes.</p>
 
-<p>So I did exactly that. I built a 1.3-million-parameter GPT-style model, trained it on children's stories, and watched it go from producing random gibberish to stringing together real-ish words. It's not going to write your essays, but the journey of building it taught me more about how LLMs work than any tutorial or YouTube video ever did.</p>
+<p>So I went ahead and did it. I built a 1.3-million-parameter GPT-style model, trained it on children's stories, and sat there watching it go from random gibberish to stringing together real-ish words. It's definitely not writing anyone's essays anytime soon, but honestly? Building this thing taught me more about how LLMs work than months of reading tutorials and watching YouTube videos.</p>
 
-<p>Let me walk you through everything — no PhD required, I promise.</p>
+<p>Here's everything I learned. No PhD required, I promise.</p>
 
 <!-- ── 2. WHAT IS A TRANSFORMER ──────────────────────────────────── -->
 <h2>What Is a Transformer, Really?</h2>
 
-<p>Forget the jargon for a second. Imagine you're reading a sentence: <em>"The cat sat on the mat because <strong>it</strong> was tired."</em></p>
+<p>Let's forget the jargon for a second. Read this sentence: <em>"The cat sat on the mat because <strong>it</strong> was tired."</em></p>
 
-<p>When you get to the word "it," your brain instantly knows "it" refers to "the cat," not "the mat." You don't think about this consciously — your brain just <em>pays attention</em> to the right words based on context.</p>
+<p>When you hit the word "it," your brain just <em>knows</em> it means "the cat," not "the mat." You don't even think about it. Your brain automatically pays attention to the right words based on context.</p>
 
-<p><strong>That's basically what a Transformer does.</strong> It's a machine that reads a sequence of words and, for every word, figures out which other words are most important for understanding it. The whole trick is in that word: <em>attention</em>.</p>
+<p><strong>That's basically what a Transformer does.</strong> For every word in a sentence, it figures out which other words matter most for understanding it. The whole trick comes down to one word: <em>attention</em>.</p>
 
-<p>Before Transformers came along in 2017 (in the famous paper "Attention Is All You Need"), language models had to read words one-by-one, left to right, like a person reading under a spotlight that can only see one word at a time. Transformers changed the game by letting the model see the <em>entire sentence at once</em> and decide what to focus on.</p>
+<p>Before Transformers showed up in 2017 (that famous "Attention Is All You Need" paper — great title, honestly), language models had to read words one-by-one, left to right. Imagine reading with a tiny flashlight that only illuminates one word at a time. Transformers tossed that flashlight and turned on the floodlights — the model sees the <em>whole sentence at once</em> and decides what to focus on.</p>
 
 <div class="callout">
     <strong>🍕 Pizza analogy:</strong> Think of older models (RNNs) as eating a pizza one bite at a time in order — you can't taste slice 5 until you've finished slices 1-4. A Transformer is like looking at the entire pizza, deciding which slices look best, and eating them in any order. Way more efficient.
@@ -279,9 +279,9 @@
 <!-- ── 3. THE ATTENTION MECHANISM ─────────────────────────────────── -->
 <h2>The Attention Mechanism: The Secret Sauce</h2>
 
-<p>Okay, so here's the cool part — the attention mechanism is basically like a search engine inside the model.</p>
+<p>Okay, so this is the part that actually made things click for me. The attention mechanism is basically a tiny search engine running inside the model.</p>
 
-<p>Every word in a sentence asks three questions about itself:</p>
+<p>Each word in a sentence asks three questions:</p>
 
 <ul>
     <li><strong>Query (Q):</strong> "What kind of information am I looking for?" — like typing a search query into Google.</li>
@@ -304,9 +304,9 @@ Token <span class="st">"it"</span>  → Key   = [<span class="nb">0.6</span>, <s
 score(cat → sat) = <span class="nb">0.5</span>×<span class="nb">0.1</span> + <span class="nb">0.1</span>×<span class="nb">0.9</span> + <span class="nb">0.8</span>×<span class="nb">0.2</span> = <span class="nb">0.30</span>  <span class="cm"># Low match</span>
 score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + <span class="nb">0.1</span>×<span class="nb">0.2</span> + <span class="nb">0.8</span>×<span class="nb">0.7</span> = <span class="nb">0.88</span>  <span class="cm"># High match!</span></pre>
 
-<p>See that? "Cat" naturally pays way more attention to "it" (score 0.88) than to "sat" (score 0.30). The model <em>learns</em> these vectors during training so the right words match up.</p>
+<p>See that? "Cat" naturally pays way more attention to "it" (0.88) than to "sat" (0.30). And here's the beautiful part — the model <em>learns</em> these vectors during training. Nobody hand-codes the rules. It just figures out which words should match up.</p>
 
-<p>After computing these scores, the model runs them through <strong>softmax</strong> (a function that squashes numbers into percentages that add up to 100%), and uses those percentages to blend the Value vectors together. The result? Each word gets a new representation that's a weighted mix of the words it paid attention to.</p>
+<p>After computing these scores, it runs them through <strong>softmax</strong> (basically squashes the numbers into percentages that add up to 100%), then uses those percentages to blend the Value vectors together. So each word ends up with a new representation that's a weighted mix of the words it cared about. Pretty slick, right?</p>
 
 <div class="callout">
     <strong>🤔 Why divide by √d?</strong> There's one more detail: the scores are divided by the square root of the vector dimension before softmax. Without this, the dot products can get really large, and softmax would essentially say "pay 100% attention to one word, 0% to everything else." The scaling keeps things smooth so the model can attend to <em>multiple</em> words at once.
@@ -314,9 +314,9 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
 
 <h3>Multi-Head Attention: Looking at Things from Different Angles</h3>
 
-<p>Here's where it gets even more clever. Instead of having one big attention mechanism, my model splits it into <strong>4 separate "heads"</strong> — four independent attention computations running in parallel.</p>
+<p>Now here's where things get even cooler. Instead of running one big attention computation, my model splits it into <strong>4 separate "heads"</strong> that all run in parallel.</p>
 
-<p>Why? Because language has many layers of meaning. One head might learn to track <em>what the subject of the sentence is</em>. Another might learn <em>which adjective modifies which noun</em>. A third might focus on <em>proximity</em> — words that are close together. Having multiple heads is like having four different people reading the same sentence, each looking for different things, and then combining their notes.</p>
+<p>Why bother? Because language is complicated and one attention pattern isn't enough. One head might learn to track subjects ("who's doing the action?"). Another might figure out adjective-noun pairs. A third could focus on nearby words. It's like having four people read the same sentence, each looking for different things, then pooling their notes at the end.</p>
 
 <p>Here's the actual code from my model that does this:</p>
 
@@ -349,14 +349,14 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
         out = attn @ v                        <span class="cm"># Weighted sum of values</span>
         <span class="cm">...</span></pre>
 
-<p>I love how the entire attention mechanism — this revolutionary idea that powers ChatGPT — boils down to a dot product, a mask, a softmax, and a matrix multiply. That's it. That's the magic.</p>
+<p>I remember staring at this code and thinking: wait, <em>this</em> is the revolutionary idea that powers ChatGPT? A dot product, a mask, a softmax, and a matrix multiply? That's it? Yep. That's it. That's the whole magic trick.</p>
 
 <!-- ── 4. ARCHITECTURE OVERVIEW ───────────────────────────────────── -->
 <h2>The Full Architecture: How It All Fits Together</h2>
 
-<p>Now let me zoom out and show you the big picture. My model is a <strong>decoder-only transformer</strong> — the same family as GPT-2, GPT-3, and LLaMA. "Decoder-only" just means it's built to predict the next word, reading left to right.</p>
+<p>Alright, time to zoom out. My model is what's called a <strong>decoder-only transformer</strong> — same family as GPT-2, GPT-3, and LLaMA. Don't let the name intimidate you. "Decoder-only" just means it reads left to right and predicts the next word. That's all.</p>
 
-<p>Here's the full data flow, from input to output:</p>
+<p>Here's what the full data flow looks like:</p>
 
 <div class="arch-diagram">  Input: "Once upon a time" → Token IDs [42, 100, 7, 303]
           │
@@ -385,13 +385,13 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
           ▼
   Output: probability distribution over next word</div>
 
-<p>A few things worth highlighting:</p>
+<p>A few things I want to call out here:</p>
 
 <ul>
-    <li><strong>Token Embeddings</strong> are a lookup table: each of the 4,000 words in our vocabulary gets its own 128-number vector. The model learns these during training.</li>
-    <li><strong>Positional Embeddings</strong> are essential because, unlike reading word-by-word, the Transformer sees all words at once. Without position info, "cat sat mat" and "mat sat cat" would look identical.</li>
-    <li><strong>Skip Connections</strong> (the "+" parts) are genius — they let information flow straight through, so each block only needs to learn a small "correction" instead of the whole representation.</li>
-    <li>The <strong>Feed-Forward Network</strong> expands each word's 128-dim vector to 512 dimensions, applies a nonlinear function (GELU), then compresses back to 128. This is where a lot of the model's "knowledge" gets stored.</li>
+    <li><strong>Token Embeddings</strong> — basically a big lookup table. Each of our 4,000 vocabulary words gets its own 128-number vector. These get learned during training.</li>
+    <li><strong>Positional Embeddings</strong> — this one tripped me up at first. Since the Transformer sees all words at once (not one-by-one), without position info "cat sat mat" and "mat sat cat" would look identical. Positions fix that.</li>
+    <li><strong>Skip Connections</strong> (the "+" arrows) — honestly one of the cleverest ideas in deep learning. They let information flow straight through, so each block only needs to learn a small "correction." Without these, deep networks are basically impossible to train.</li>
+    <li><strong>Feed-Forward Network</strong> — expands each word's 128-dim vector to 512 dimensions, runs it through a nonlinear function (GELU), then squishes it back to 128. A lot of the model's "knowledge" lives here.</li>
 </ul>
 
 <h3>My Model's Specs</h3>
@@ -405,14 +405,14 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
     <div class="stat-card"><span class="num">128</span><span class="label">Context Window</span></div>
 </div>
 
-<p>For perspective: GPT-3 has <strong>175 billion</strong> parameters. My model has 1.3 million — about 130,000× smaller. It's like comparing a paper airplane to a Boeing 747. But they both fly (sort of), and studying the paper airplane teaches you the principles of flight.</p>
+<p>For some perspective: GPT-3 has <strong>175 billion</strong> parameters. Mine has 1.3 million. That's about 130,000× smaller. It's like comparing a paper airplane to a 747. But you know what? They both fly (sort of), and you learn way more about aerodynamics from folding paper than from staring at a jet engine.</p>
 
 <!-- ── 5. TRAINING PROCESS ────────────────────────────────────────── -->
 <h2>Training: Watching a Model Learn</h2>
 
-<p>Training a language model is conceptually simple: show it tons of text, ask it to predict the next word, tell it how wrong it was, and nudge the parameters to be less wrong next time. Repeat a few hundred thousand times.</p>
+<p>Training a language model is one of those things that's conceptually simple but took me a while to really <em>get</em>. The idea: show it a bunch of text, ask it to predict the next word, tell it how wrong it was, nudge the parameters to be less wrong. Do that a few hundred thousand times and hope for the best.</p>
 
-<p>Here's the core training loop, stripped to its essence:</p>
+<p>Here's what the core loop looks like, stripped down:</p>
 
 <pre><span class="kw">for</span> step <span class="kw">in</span> <span class="fn">range</span>(max_steps):
     input_ids, target_ids = get_batch()      <span class="cm"># Grab a chunk of text</span>
@@ -428,7 +428,7 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
 
 <h3>The Learning Curve</h3>
 
-<p>I was genuinely fascinated watching the loss curve. Here's what happened:</p>
+<p>I'm not gonna lie, I was glued to my terminal watching the numbers tick down. Here's what happened:</p>
 
 <table class="loss-table">
     <thead>
@@ -448,12 +448,12 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
     <strong>📊 What does the loss number mean?</strong> A loss of 7.89 at the start is close to <code>ln(4000) ≈ 8.29</code>, which is what you'd get from purely random guessing over a 4,000-word vocabulary. By step 500, the loss dropped to ~4.05, meaning the model is doing significantly better than random — but it's still pretty confused. To put it another way: a loss of 4.05 means the model's effective vocabulary at each prediction is about <code>e^4.05 ≈ 57</code> words. Not great, but way better than 4,000!
 </div>
 
-<p>One thing I noticed: the gap between training loss (4.05) and validation loss (4.90) started to widen, which is the first hint of overfitting — the model was starting to memorize the training data rather than learning general patterns. This makes sense: with only ~1M tokens of training data, there's not much to generalize from.</p>
+<p>One thing that bugged me: see how the training loss (4.05) and validation loss (4.90) keep drifting apart? That's overfitting — the model was starting to just memorize the training stories instead of learning general patterns about English. Makes total sense when you think about it: with only ~1M tokens of data, there just isn't enough variety to generalize from.</p>
 
 <!-- ── 6. RESULTS ─────────────────────────────────────────────────── -->
 <h2>Results: What Does This Thing Actually Produce?</h2>
 
-<p>Alright, moment of truth. I was equal parts excited and terrified to generate text from my baby model. Let me show you the raw, unfiltered output:</p>
+<p>Alright, moment of truth. I was genuinely nervous hitting enter on that first generate command. Would it produce something cool? Something embarrassing? Let me just show you the raw, unfiltered output:</p>
 
 <div class="gen-example">
     <span class="prompt">Prompt:</span> "Once upon a time"<br><br>
@@ -465,7 +465,7 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
     <strong>Output:</strong> The king exer bigger Sit asure notice forwar locked forwar Sit endar saved Sit roll Sit ! Sit decor cannot Sit island Sit belt Sit G isdom Sit seem escape Sit …
 </div>
 
-<p>Okay, so it's not Shakespeare. 😄 But let's be fair to our tiny model and look at what it <em>did</em> learn:</p>
+<p>Yeah... not exactly Shakespeare. 😄 I laughed, honestly. But then I looked more carefully and realized it <em>had</em> actually learned some stuff:</p>
 
 <ul>
     <li>It picked up real English tokens — "escape," "bigger," "cannot," "island," "notice," "saved"</li>
@@ -474,7 +474,7 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
     <li>The BPE sub-word tokens are visible: "forwar" (forward), "hospit" (hospital), "endar" (calendar?) — it learned the vocabulary but can't quite string them into meaning yet</li>
 </ul>
 
-<p>The model trained for only 500 steps on a tiny dataset. It learned that language has structure — that certain tokens follow other tokens — but it didn't have enough training to learn <em>meaning</em>. To get genuinely coherent text, you'd need to scale up training steps (2,000–5,000), use more data, and possibly increase the model size.</p>
+<p>So what's going on? The model trained for only 500 steps on a tiny dataset. It picked up that language has structure — certain tokens follow other tokens in patterns — but 500 steps just wasn't enough for it to learn actual <em>meaning</em>. If I wanted coherent text, I'd need way more training steps (like 2,000–5,000), more data, and probably a bigger model. But for a first attempt? I was honestly kind of proud of it.</p>
 
 <div class="callout warn">
     <strong>🎯 Key insight:</strong> This is actually <em>exactly</em> how the big models work too — they just do it with 100,000× more parameters and 1,000,000× more data. The learning process is fundamentally the same. GPT-4 didn't learn differently; it just learned <em>more</em>.
@@ -483,7 +483,7 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
 <!-- ── 7. KEY CODE SNIPPETS ───────────────────────────────────────── -->
 <h2>Under the Hood: Key Code Explained</h2>
 
-<p>Let me walk you through a few pieces of the code that I found most illuminating.</p>
+<p>I want to show you a few pieces of the code that made me go "ohhhh, <em>that's</em> how it works."</p>
 
 <h3>The Heart of the Model</h3>
 
@@ -506,11 +506,11 @@ score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + 
         <span class="cm"># Neat trick: share weights between embedding and output</span>
         self.lm_head.weight = self.token_emb.weight</pre>
 
-<p>That last line — <strong>weight tying</strong> — is a clever trick used by GPT-2 and many modern models. The token embedding converts words→vectors, and the output layer converts vectors→word-scores. They're doing conceptually opposite things, so sharing the weights saves ~500K parameters and actually makes the model work <em>better</em>.</p>
+<p>That last line — <strong>weight tying</strong> — blew my mind a little. The token embedding converts words→vectors, and the output layer converts vectors→word-scores. They're doing opposite things, so you'd think they need separate weights. But it turns out sharing them saves ~500K parameters and actually makes the model work <em>better</em>. GPT-2 does this too. When I first read about it I thought it was a hack, but the more I think about it the more it makes sense.</p>
 
 <h3>The Causal Mask: No Cheating Allowed</h3>
 
-<p>One detail that blew my mind is the causal mask. During training, the model sees the full sentence at once, but we need to prevent it from "cheating" — looking ahead at words it hasn't generated yet. The solution is a triangular mask:</p>
+<p>This one's fun. During training, the model sees the full sentence at once — but we can't let it cheat by peeking at future words it hasn't "generated" yet. So how do you prevent a model from looking ahead? A triangular mask:</p>
 
 <pre><span class="cm"># Create a mask where True = "block this position"</span>
 mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</span>).bool()
@@ -522,11 +522,11 @@ mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</spa
 <span class="cm"># Word 2:   [  OK     OK     OK    BLOCK ]  ← sees words 0,1,2</span>
 <span class="cm"># Word 3:   [  OK     OK     OK     OK   ]  ← sees everything</span></pre>
 
-<p>The masked positions get set to negative infinity before softmax, which means they become exactly 0% attention. Information only flows from past to present — never the other direction.</p>
+<p>Those masked positions get set to negative infinity before softmax, which makes them exactly 0% attention. Information only flows from past to present — never the other direction. At first I thought this was a weird trick, but it's actually really elegant when you sit with it for a minute.</p>
 
 <h3>Learning Rate Warmup + Cosine Decay</h3>
 
-<p>One thing I didn't appreciate before building this: the learning rate schedule matters <em>a lot</em>. You can't just pick one number and go. Here's the schedule I used:</p>
+<p>Before this project, I figured learning rate was just... a number you set and forget. Nope. It turns out the <em>schedule</em> matters a lot — maybe more than the actual value. Here's what I used:</p>
 
 <pre><span class="kw">def</span> <span class="fn">get_lr</span>(step, cfg):
     <span class="cm"># Phase 1: Warmup (steps 0-50) — start gentle</span>
@@ -538,12 +538,12 @@ mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</spa
     min_lr = cfg.learning_rate * <span class="nb">0.1</span>  <span class="cm"># Never go below 10% of peak</span>
     <span class="kw">return</span> min_lr + <span class="nb">0.5</span> * (cfg.learning_rate - min_lr) * (<span class="nb">1</span> + math.cos(math.pi * progress))</pre>
 
-<p>Think of it like driving: you start slowly (warmup), hit highway speed (peak learning rate), then gradually slow down as you approach your destination (cosine decay). Starting too fast at the beginning — when the model's weights are all random — causes chaos.</p>
+<p>Think of it like driving: you ease onto the highway (warmup), cruise at full speed (peak learning rate), then gradually slow down as you approach your exit (cosine decay). I tried skipping the warmup once — just went straight to the full learning rate — and the loss went completely haywire. Lesson learned.</p>
 
 <!-- ── 8. VISUALS ─────────────────────────────────────────────────── -->
 <h2>Visualizing the Training Process</h2>
 
-<p>I plotted the training and validation loss over all 500 steps. Here's what the learning journey looks like:</p>
+<p>I'm a sucker for charts, so obviously I had to plot the loss curve. Here's the training journey:</p>
 
 <div style="background:#f8f8f8; padding:1.5rem; border-radius:10px; margin:1.5rem 0;">
     <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:600px; display:block; margin:0 auto;">
@@ -629,35 +629,35 @@ mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</spa
     <p style="text-align:center; font-size:0.85rem; color:#777; margin-top:0.5rem; font-family:sans-serif;">Training and validation loss over 500 steps. The steep early drop is the model learning basic vocabulary patterns.</p>
 </div>
 
-<p>The steepest learning happens in the first 100 steps — that's when the model goes from "I literally have no idea what English is" to "okay, some words are more common than others." After that, improvement gets slower and slower. This is completely normal and is what you'd see at any scale.</p>
+<p>See that steep cliff in the first 100 steps? That's the model going from "I literally have no idea what English is" to "oh wait, some words show up way more than others." After that initial burst, progress slows way down. Totally normal — you'd see the exact same shape if you were training GPT-4, just over way more steps.</p>
 
 <!-- ── 9. LESSONS LEARNED ─────────────────────────────────────────── -->
 <h2>Lessons I Learned Along the Way</h2>
 
-<p>Building this project taught me a bunch of things that I didn't expect. Here are my biggest takeaways:</p>
+<p>This project taught me a bunch of things I really didn't expect. Some of these might seem obvious in hindsight, but they hit different when you discover them by breaking stuff.</p>
 
-<p><strong>1. The architecture is surprisingly simple.</strong> Before this project, I thought Transformers must be incredibly complex under the hood. They're not. The core idea — Q, K, V attention — is just dot products and softmax. The genius is in how these simple pieces compose together.</p>
+<p><strong>1. Transformers are simpler than I thought.</strong> Seriously. I spent weeks being intimidated before I actually looked at the code. The core idea — Q, K, V attention — is just dot products and softmax. That's it. The genius isn't in any single piece; it's in how the simple pieces stack together.</p>
 
-<p><strong>2. Data matters more than model size.</strong> My model's biggest limitation wasn't its 1.3M parameters — it was the tiny dataset of children's stories. Even a small model can produce decent text if you give it enough diverse data. The big models aren't magic; they're just very well-fed.</p>
+<p><strong>2. Data > model size.</strong> My model's biggest problem wasn't having only 1.3M parameters — it was the tiny dataset. Even a small model can produce decent output if you feed it enough diverse data. GPT-3 isn't magic; it's just very, very well-fed.</p>
 
-<p><strong>3. Tokenization is half the battle.</strong> Before text even reaches the model, it gets chopped into sub-word tokens by the BPE tokenizer. The quality of these tokens — how well they capture meaningful chunks of language — has a huge impact on what the model can learn.</p>
+<p><strong>3. Tokenization is half the battle</strong> and I almost overlooked it entirely. Before text even reaches the model, the BPE tokenizer chops it into sub-word tokens. How well those tokens capture meaningful chunks of language has a massive impact on everything downstream.</p>
 
-<p><strong>4. Loss numbers are deeply unintuitive.</strong> Going from loss 8.0 to 4.0 sounds like "cutting the error in half," but in practice it means going from "random guessing" to "knows which 57 words are plausible here." The log-scale nature of cross-entropy loss took me a while to internalize.</p>
+<p><strong>4. Loss numbers make no intuitive sense at first.</strong> Going from 8.0 to 4.0 sounds like "cutting the error in half." In reality it means going from "random guessing" to "can narrow things down to about 57 plausible words." The log scale took me embarrassingly long to internalize.</p>
 
-<p><strong>5. The learning rate schedule isn't optional.</strong> I tried training without warmup once and the loss spiked all over the place. The combination of warmup + cosine decay that every modern LLM uses isn't ceremony — it's genuinely important for stable training.</p>
+<p><strong>5. Don't skip the learning rate warmup.</strong> Ask me how I know. (I skipped it. The loss exploded. Fun times.) The warmup + cosine decay schedule that everyone uses isn't some ritual — it's actually critical for stable training.</p>
 
-<p><strong>6. Weight tying is elegant.</strong> Sharing the embedding and output weights saves memory and actually improves performance. The intuition — that similar words should have similar embeddings AND similar output probabilities — is really satisfying once it clicks.</p>
+<p><strong>6. Weight tying is one of those ideas that seems wrong until it's obviously right.</strong> Sharing weights between the embedding layer and the output layer saves ~500K parameters AND improves performance. The intuition clicked for me when I realized: words that are similar should have similar embeddings AND similar output probabilities. Of course they should share weights.</p>
 
 <div class="callout">
-    <strong>💡 My #1 tip for anyone starting out:</strong> Don't try to understand everything at once. Build it, run it, and watch the loss go down. Then go back and read the code more carefully. Understanding comes from doing, not just reading.
+    <strong>💡 My #1 tip if you're just starting:</strong> Don't try to understand everything before you start coding. Just build it, run it, watch the loss go down. <em>Then</em> go back and read the code more carefully. I promise it'll make 10x more sense after you've seen it work.
 </div>
 
 <!-- ── 10. CALL TO ACTION ─────────────────────────────────────────── -->
 <h2>Your Turn: Try It Yourself!</h2>
 
-<p>Everything I built is open source and ready for you to play with. The whole project is heavily commented — I wrote it as much for future-me as for anyone else — so you can read the code like a tutorial.</p>
+<p>The whole thing is open source and I'd genuinely love it if you gave it a shot. I commented the heck out of the code (mostly for future-me who will definitely forget how all this works in a month), so you can basically read it like a tutorial.</p>
 
-<p><strong>Here's how to get started:</strong></p>
+<p><strong>Getting started takes like 5 minutes:</strong></p>
 
 <ol>
     <li>Clone the repo and install dependencies (just PyTorch + tokenizers)</li>
@@ -667,12 +667,12 @@ mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</spa
     <li>Explore the Jupyter notebook for a deep-dive walkthrough</li>
 </ol>
 
-<p>Once you've got it running, try experimenting:</p>
+<p>Once it's running, here are some fun experiments to try:</p>
 <ul>
-    <li>Increase <code>max_steps</code> to 2000 or 5000 — see how the output improves</li>
-    <li>Bump up <code>d_model</code> from 128 to 256 — watch the parameter count quadruple</li>
-    <li>Swap in your own text dataset — what happens with Shakespeare? Song lyrics? Code?</li>
-    <li>Play with generation temperature — 0.3 for focused output, 1.5 for creative chaos</li>
+    <li>Crank <code>max_steps</code> up to 2000 or 5000 and watch the output get noticeably better</li>
+    <li>Bump <code>d_model</code> from 128 to 256 — the parameter count quadruples (math is wild)</li>
+    <li>Swap in a completely different dataset. What happens with Shakespeare? Song lyrics? Python code?</li>
+    <li>Mess with the generation temperature — 0.3 gives you boring-but-safe output, 1.5 gives you creative chaos</li>
 </ul>
 
 <p style="text-align:center; margin: 2.5rem 0 1.5rem;">
@@ -687,7 +687,7 @@ mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</spa
 </article>
 
 <footer>
-    Built with curiosity, PyTorch, and a lot of print() statements.
+    Built with curiosity, PyTorch, and way too many print() statements at 2am.
 </footer>
 
 </body>
