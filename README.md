@@ -1,5 +1,7 @@
 # 🧠 Small LLM From Scratch
 
+> **Repository:** [https://github.com/brunotaboada/small-llm-from-scratch](https://github.com/brunotaboada/small-llm-from-scratch)
+
 A **complete, educational** project that builds and trains a GPT-style language model from scratch using PyTorch. Every component — tokenizer, transformer architecture, training loop, and text generation — is implemented with thorough documentation so you can learn how modern LLMs work.
 
 ---
@@ -76,6 +78,13 @@ Input Token IDs
 ---
 
 ## 🚀 Quick Start
+
+### 0. Clone the Repository
+
+```bash
+git clone https://github.com/brunotaboada/small-llm-from-scratch.git
+cd small-llm-from-scratch
+```
 
 ### 1. Install Dependencies
 
