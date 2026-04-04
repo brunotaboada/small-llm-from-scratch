@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+checkpoints/*.pt
+data/*.txt
+tokenizer_model/
+*.log
+.DS_Store
+core
