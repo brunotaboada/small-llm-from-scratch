@@ -1,15 +1,16 @@
 # Tiny GPT
 
-Minimal word-level transformer: train in PyTorch, run the forward pass in NumPy.
+A tiny word-level transformer written for beginners: train in PyTorch, run every
+step of inference in NumPy. Comments explain the “magic numbers” (like `-1e9`
+for masking future words).
 
-Inspired by the idea of a tiny patterned-English GPT (small vocab, size/color/`and`
-demos). The code and presentation are original to this project; the math (attention,
-GELU, layer norm) is standard transformer material.
+Inspired by the idea of a patterned-English toy GPT. Implementation and wording
+are original; attention / GELU / layer-norm math is standard.
 
 ```bash
 pip install -r requirements.txt
-python train.py    # train + write models/tiny_english_gpt.npz
-python infer.py    # NumPy demos
+python train.py    # learn weights → models/tiny_english_gpt.npz
+python infer.py    # load .npz and generate
 ```
 
 | Prompt | Typical continuation |
@@ -19,7 +20,7 @@ python infer.py    # NumPy demos
 | `the cat and the` | `dog END` |
 | `the small dog ran to the small` | `house END` |
 
-- `train.py` — data, model, training loop, export `.npz`
-- `infer.py` — load weights, NumPy forward pass, demos
+- `train.py` — vocab, data, model, training (start here)
+- `infer.py` — NumPy forward pass; read the `-1e9` note at the top
 
 Config: `dim=32`, 2 layers, 4 heads (~26K params).
