@@ -18,6 +18,15 @@ small_llm_from_scratch/
 ├── generate.py          # Text generation with multiple sampling strategies
 ├── plot_losses.py       # Visualize training/validation loss curves
 ├── requirements.txt     # Python dependencies
+├── tiny_english/        # 20-word pedagogical GPT (algo.monster-style)
+│   ├── vocab.py         # Fixed word-level vocabulary
+│   ├── data.py          # Synthetic pattern corpus
+│   ├── model.py         # TinyEnglishGPT (course weight names)
+│   ├── train.py         # Train until capability demos pass
+│   ├── export_npz.py  # Export models/tiny_english_gpt.npz
+│   └── infer_numpy.py   # NumPy inference (same as course demo)
+├── models/
+│   └── tiny_english_gpt.npz  # Exported weights for NumPy / browser demos
 ├── notebooks/
 │   └── walkthrough.ipynb  # Interactive Jupyter notebook tutorial
 ├── data/
@@ -28,6 +37,34 @@ small_llm_from_scratch/
 └── checkpoints/
     └── *.pt             # Model checkpoints
 ```
+
+---
+
+## 🐭 Tiny English GPT (20-word pedagogical model)
+
+A second track that matches the [algo.monster Tiny LLM course](https://algo.monster/courses/llm/llm_course_introduction) demo: word-level vocab, synthetic patterns, and NumPy inference from an `.npz` weight file.
+
+```bash
+# Train (stops early once the four demos pass — usually ~200 steps on CPU)
+python -m tiny_english.train
+
+# Export weights for NumPy / Pyodide-style loaders
+python -m tiny_english.export_npz
+
+# Run the course demos in pure NumPy
+python -m tiny_english.infer_numpy
+```
+
+Expected greedy outputs:
+
+| Prompt | Continuation |
+|--------|--------------|
+| `the big cat sat on the` | `big mat END` |
+| `the red big cat sat on the` | `big mat END` |
+| `the cat and the` | `dog END` |
+| `the small dog ran to the small` | `house END` |
+
+Config: `d_model=32`, `n_layers=2`, `n_heads=4`, ~26K parameters. Weight keys match the course NumPy loader (`blocks.{i}.attn.W_q.weight`, etc.).
 
 ---
 

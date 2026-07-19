@@ -3,8 +3,10 @@ __pycache__/
 *.pyo
 .ipynb_checkpoints/
 checkpoints/*.pt
+tiny_english/checkpoints/*.pt
 data/*.txt
 tokenizer_model/
 *.log
 .DS_Store
 core
+.venv/
