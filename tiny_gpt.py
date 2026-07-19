@@ -1,11 +1,16 @@
 """
-Tiny English GPT — train a tiny transformer, then run it in plain NumPy.
+A tiny word-level GPT you can train and inspect in one file.
 
-Same style as the algo.monster course demo.
+Inspired by the idea of a minimal English toy transformer (small vocab,
+patterned sentences), but the code, training loop, and wording here are
+original to this project.
 
-  python tiny_gpt.py          # train (if needed) + demos
-  python tiny_gpt.py --train  # force retrain
+Usage:
+  python tiny_gpt.py          # run demos (trains once if weights missing)
+  python tiny_gpt.py --train  # retrain from scratch
 """
+
+from __future__ import annotations
 
 import argparse
 import random
@@ -16,358 +21,355 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-MODEL_PATH = Path(__file__).parent / "models" / "tiny_english_gpt.npz"
+WEIGHTS_FILE = Path(__file__).resolve().parent / "models" / "tiny_english_gpt.npz"
 
-# ---------------------------------------------------------------------------
-# Vocab + size
-# ---------------------------------------------------------------------------
-VOCAB = [
+# --- vocabulary: each word is one token id ---
+WORDS = [
     "the", "cat", "dog", "sat", "ran", "on", "mat", "house", "a", "big",
     "small", "quickly", "slowly", "and", "is", "red", "blue", "to", "PAD", "END",
 ]
-WORD2ID = {w: i for i, w in enumerate(VOCAB)}
-PAD, END, V = WORD2ID["PAD"], WORD2ID["END"], len(VOCAB)
+TO_ID = {w: i for i, w in enumerate(WORDS)}
+PAD_ID, END_ID = TO_ID["PAD"], TO_ID["END"]
+VOCAB_SIZE = len(WORDS)
 
-D, N_LAYERS, N_HEADS, D_FF, MAX_LEN = 32, 2, 4, 128, 16
-
-
-# ---------------------------------------------------------------------------
-# Training data (simple patterns)
-# ---------------------------------------------------------------------------
-def make_sentences():
-    sents = []
-    for size in ["big", "small"]:
-        for animal in ["cat", "dog"]:
-            sents += [
-                f"the {size} {animal} sat on the {size} mat",
-                f"the {size} {animal} ran to the {size} house",
-            ]
-            for color in ["red", "blue"]:
-                sents += [
-                    f"the {color} {size} {animal} sat on the {size} mat",
-                    f"the {color} {size} {animal} ran to the {size} house",
-                ]
-    for color in ["red", "blue"]:
-        for animal in ["cat", "dog"]:
-            sents += [
-                f"the {color} {animal} sat on the mat",
-                f"the {color} {animal} sat on the house",
-                f"the {color} {animal} ran to the mat",
-                f"the {color} {animal} ran to the house",
-            ]
-    for a, b in [("cat", "dog"), ("dog", "cat")]:
-        sents += [f"the {a} and the {b}"] * 5
-    sents += ["the cat and the cat", "the dog and the dog"]
-    return sents
+# --- tiny architecture ---
+DIM = 32
+LAYERS = 2
+HEADS = 4
+FF_DIM = 128
+CTX = 16
 
 
-def encode_pair(sentence):
-    ids = [WORD2ID[w] for w in sentence.split()] + [END]
-    inp, tgt = ids[:-1], ids[1:]
-    inp += [PAD] * (MAX_LEN - len(inp))
-    tgt += [PAD] * (MAX_LEN - len(tgt))
-    return inp[:MAX_LEN], tgt[:MAX_LEN]
+# =============================================================================
+# Data: short patterned sentences so attention has something clear to learn
+# =============================================================================
+
+def build_corpus() -> list[str]:
+    """Hand-written sentences covering size, color noise, and 'and' variety."""
+    out: list[str] = []
+    for size in ("big", "small"):
+        for animal in ("cat", "dog"):
+            out.append(f"the {size} {animal} sat on the {size} mat")
+            out.append(f"the {size} {animal} ran to the {size} house")
+            for color in ("red", "blue"):
+                out.append(f"the {color} {size} {animal} sat on the {size} mat")
+                out.append(f"the {color} {size} {animal} ran to the {size} house")
+
+    # Color without size → mixed endings (color should not decide the object)
+    for color in ("red", "blue"):
+        for animal in ("cat", "dog"):
+            out.append(f"the {color} {animal} sat on the mat")
+            out.append(f"the {color} {animal} sat on the house")
+            out.append(f"the {color} {animal} ran to the mat")
+            out.append(f"the {color} {animal} ran to the house")
+
+    # Prefer different animals after "and"
+    for left, right in (("cat", "dog"), ("dog", "cat")):
+        out.extend([f"the {left} and the {right}"] * 5)
+    out.append("the cat and the cat")
+    out.append("the dog and the dog")
+    return out
 
 
-# ---------------------------------------------------------------------------
-# Tiny PyTorch model (only used for training / saving weights)
-# ---------------------------------------------------------------------------
-class Block(nn.Module):
-    def __init__(self):
+def to_train_example(sentence: str) -> tuple[list[int], list[int]]:
+    """Next-word pairs, padded to CTX. PAD targets are ignored in the loss."""
+    ids = [TO_ID[w] for w in sentence.split()] + [END_ID]
+    x, y = ids[:-1], ids[1:]
+    pad = CTX - len(x)
+    if pad > 0:
+        x, y = x + [PAD_ID] * pad, y + [PAD_ID] * pad
+    return x[:CTX], y[:CTX]
+
+
+# =============================================================================
+# Train with PyTorch (autograd), export NumPy-friendly weights
+# =============================================================================
+
+class AttnFFBlock(nn.Module):
+    def __init__(self) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(D)
-        # Nested so .npz keys match NumPy: blocks.i.attn.W_q.weight, blocks.i.ff.linear1...
-        self.attn = nn.ModuleDict({
-            "W_q": nn.Linear(D, D, bias=False),
-            "W_k": nn.Linear(D, D, bias=False),
-            "W_v": nn.Linear(D, D, bias=False),
-            "W_o": nn.Linear(D, D, bias=False),
-        })
-        self.norm2 = nn.LayerNorm(D)
-        self.ff = nn.ModuleDict({
-            "linear1": nn.Linear(D, D_FF),
-            "linear2": nn.Linear(D_FF, D),
-        })
-        self.register_buffer("mask", torch.triu(torch.ones(MAX_LEN, MAX_LEN), 1).bool())
+        self.norm1 = nn.LayerNorm(DIM)
+        self.attn = nn.ModuleDict(
+            {
+                "W_q": nn.Linear(DIM, DIM, bias=False),
+                "W_k": nn.Linear(DIM, DIM, bias=False),
+                "W_v": nn.Linear(DIM, DIM, bias=False),
+                "W_o": nn.Linear(DIM, DIM, bias=False),
+            }
+        )
+        self.norm2 = nn.LayerNorm(DIM)
+        self.ff = nn.ModuleDict(
+            {
+                "linear1": nn.Linear(DIM, FF_DIM),
+                "linear2": nn.Linear(FF_DIM, DIM),
+            }
+        )
+        causal = torch.triu(torch.ones(CTX, CTX), diagonal=1).bool()
+        self.register_buffer("causal", causal)
 
-    def forward(self, x):
-        B, T, _ = x.shape
-        h, d_k = self.norm1(x), D // N_HEADS
-        q = self.attn.W_q(h).view(B, T, N_HEADS, d_k).transpose(1, 2)
-        k = self.attn.W_k(h).view(B, T, N_HEADS, d_k).transpose(1, 2)
-        v = self.attn.W_v(h).view(B, T, N_HEADS, d_k).transpose(1, 2)
-        scores = (q @ k.transpose(-2, -1)) / (d_k ** 0.5)
-        scores = scores.masked_fill(self.mask[:T, :T], float("-inf"))
-        out = (F.softmax(scores, dim=-1) @ v).transpose(1, 2).contiguous().view(B, T, D)
-        x = x + self.attn.W_o(out)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, t, _ = x.shape
+        head = DIM // HEADS
+        h = self.norm1(x)
+        q = self.attn.W_q(h).view(b, t, HEADS, head).transpose(1, 2)
+        k = self.attn.W_k(h).view(b, t, HEADS, head).transpose(1, 2)
+        v = self.attn.W_v(h).view(b, t, HEADS, head).transpose(1, 2)
+        dots = (q @ k.transpose(-2, -1)) / (head**0.5)
+        dots = dots.masked_fill(self.causal[:t, :t], float("-inf"))
+        mix = (F.softmax(dots, dim=-1) @ v).transpose(1, 2).contiguous().view(b, t, DIM)
+        x = x + self.attn.W_o(mix)
         h = self.norm2(x)
         return x + self.ff.linear2(F.gelu(self.ff.linear1(h)))
 
 
 class TinyGPT(nn.Module):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.token_embed = nn.Embedding(V, D, padding_idx=PAD)
-        self.pos_embed = nn.Embedding(MAX_LEN, D)
-        self.blocks = nn.ModuleList([Block() for _ in range(N_LAYERS)])
-        self.ln_f = nn.LayerNorm(D)
-        self.lm_head = nn.Linear(D, V, bias=False)
+        self.token_embed = nn.Embedding(VOCAB_SIZE, DIM, padding_idx=PAD_ID)
+        self.pos_embed = nn.Embedding(CTX, DIM)
+        self.blocks = nn.ModuleList(AttnFFBlock() for _ in range(LAYERS))
+        self.ln_f = nn.LayerNorm(DIM)
+        self.lm_head = nn.Linear(DIM, VOCAB_SIZE, bias=False)
         self.lm_head.weight = self.token_embed.weight
 
-    def forward(self, idx, targets=None):
-        B, T = idx.shape
-        x = self.token_embed(idx) + self.pos_embed(torch.arange(T, device=idx.device))
+    def forward(
+        self, idx: torch.Tensor, targets: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        _, t = idx.shape
+        x = self.token_embed(idx) + self.pos_embed(torch.arange(t, device=idx.device))
         for block in self.blocks:
             x = block(x)
         logits = self.lm_head(self.ln_f(x))
         loss = None
         if targets is not None:
-            loss = F.cross_entropy(logits.view(-1, V), targets.view(-1), ignore_index=PAD)
+            loss = F.cross_entropy(
+                logits.reshape(-1, VOCAB_SIZE),
+                targets.reshape(-1),
+                ignore_index=PAD_ID,
+            )
         return logits, loss
 
 
-def save_npz(model):
-    """Save with names the NumPy code below expects."""
-    arrays = {
-        "vocab": np.array(VOCAB, dtype=object),
-        "d_model": np.array(D),
-        "n_layers": np.array(N_LAYERS),
-        "n_heads": np.array(N_HEADS),
+def export_weights(model: TinyGPT) -> None:
+    blob: dict[str, np.ndarray] = {
+        "vocab": np.array(WORDS, dtype=object),
+        "d_model": np.array(DIM),
+        "n_layers": np.array(LAYERS),
+        "n_heads": np.array(HEADS),
     }
-    for name, t in model.state_dict().items():
-        if name.endswith("mask"):
+    for key, tensor in model.state_dict().items():
+        if key.endswith("causal"):
             continue
-        arrays[name] = t.detach().cpu().numpy()
-    if "lm_head.weight" not in arrays:
-        arrays["lm_head.weight"] = arrays["token_embed.weight"]
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(MODEL_PATH, **arrays)
-    print(f"Saved {MODEL_PATH}")
+        blob[key] = tensor.detach().cpu().numpy()
+    if "lm_head.weight" not in blob:
+        blob["lm_head.weight"] = blob["token_embed.weight"]
+    WEIGHTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(WEIGHTS_FILE, **blob)
+    print(f"wrote {WEIGHTS_FILE}")
 
 
-def check_demos(model):
-    """Return True if the 4 course demos pass (greedy)."""
-    checks = [
-        ("the big cat sat on the", ["big", "mat"]),
-        ("the red big cat sat on the", ["big", "mat"]),
-        ("the cat and the", ["dog"]),
-        ("the small dog ran to the small", ["house"]),
+def passes_smoke_tests(model: TinyGPT) -> bool:
+    """Quick checks that training learned the intended patterns."""
+    cases = [
+        ("the big cat sat on the", ("big", "mat")),
+        ("the red big cat sat on the", ("big", "mat")),
+        ("the cat and the", ("dog",)),
+        ("the small dog ran to the small", ("house",)),
     ]
     model.eval()
     with torch.no_grad():
-        for prompt, want in checks:
-            ids = [WORD2ID[w] for w in prompt.split()]
+        for prompt, expect in cases:
+            ids = [TO_ID[w] for w in prompt.split()]
             for _ in range(3):
-                x = torch.tensor([ids[-MAX_LEN:]])
-                logits, _ = model(x)
+                logits, _ = model(torch.tensor([ids[-CTX:]]))
                 nxt = int(logits[0, -1].argmax())
                 ids.append(nxt)
-                if nxt == END:
+                if nxt == END_ID:
                     break
-            got = [VOCAB[i] for i in ids[len(prompt.split()):]]
-            if got[: len(want)] != want:
+            got = tuple(WORDS[i] for i in ids[len(prompt.split()) :])
+            if got[: len(expect)] != expect:
                 return False
     return True
 
 
-def train():
+def train(max_steps: int = 800) -> None:
     torch.manual_seed(42)
     random.seed(42)
-    pairs = [encode_pair(s) for _ in range(40) for s in make_sentences()]
+    data = [to_train_example(s) for _ in range(40) for s in build_corpus()]
     model = TinyGPT()
     opt = torch.optim.AdamW(model.parameters(), lr=3e-3)
-    print(f"Training ({sum(p.numel() for p in model.parameters()):,} params)...")
+    n = sum(p.numel() for p in model.parameters())
+    print(f"training tiny gpt ({n:,} parameters)...")
 
     step = 0
-    while step < 800:
-        random.shuffle(pairs)
-        for i in range(0, len(pairs) - 31, 32):
-            batch = pairs[i : i + 32]
-            x = torch.tensor([b[0] for b in batch])
-            y = torch.tensor([b[1] for b in batch])
-            _, loss = model(x, y)
+    while step < max_steps:
+        random.shuffle(data)
+        for i in range(0, len(data) - 31, 32):
+            batch = data[i : i + 32]
+            xb = torch.tensor([p[0] for p in batch])
+            yb = torch.tensor([p[1] for p in batch])
+            _, loss = model(xb, yb)
             opt.zero_grad()
             loss.backward()
             opt.step()
             step += 1
             if step % 50 == 0:
-                print(f"  step {step}  loss={loss.item():.3f}")
-                if check_demos(model):
-                    print("  demos passed!")
-                    save_npz(model)
+                print(f"  step {step:4d}  loss {loss.item():.3f}")
+                if passes_smoke_tests(model):
+                    print("  smoke tests ok — exporting weights")
+                    export_weights(model)
                     return
-            if step >= 800:
+            if step >= max_steps:
                 break
-    save_npz(model)
+    export_weights(model)
 
 
-# ============================================================================
-# Full Transformer Implementation (NumPy — course style)
-# ============================================================================
+# =============================================================================
+# Inference in NumPy (no PyTorch) — written for this repo, not a course dump
+# =============================================================================
 
-def gelu(x):
-    """GELU activation (Module 2)"""
+def _gelu(x: np.ndarray) -> np.ndarray:
+    # tanh approximation of GELU
     return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
 
 
-def softmax(x, axis=-1):
-    """Softmax (Module 2)"""
-    exp_x = np.exp(x - np.max(x, axis=axis, keepdims=True))
-    return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
+def _softmax(x: np.ndarray, axis: int = -1) -> np.ndarray:
+    shifted = x - np.max(x, axis=axis, keepdims=True)
+    e = np.exp(shifted)
+    return e / np.sum(e, axis=axis, keepdims=True)
 
 
-def layer_norm(x, weight, bias, eps=1e-5):
-    """Layer normalization (Module 2)"""
-    mean = np.mean(x, axis=-1, keepdims=True)
-    variance = np.var(x, axis=-1, keepdims=True)
-    x_norm = (x - mean) / np.sqrt(variance + eps)
-    return weight * x_norm + bias
+def _layernorm(x: np.ndarray, gamma: np.ndarray, beta: np.ndarray) -> np.ndarray:
+    mu = x.mean(axis=-1, keepdims=True)
+    var = x.var(axis=-1, keepdims=True)
+    return gamma * (x - mu) / np.sqrt(var + 1e-5) + beta
 
 
-def multi_head_attention(x, W_q, W_k, W_v, W_o, n_heads, mask=None):
-    """Multi-head attention (Module 3-4)"""
-    seq_len, d_model = x.shape
-    d_k = d_model // n_heads
+def _attend(
+    x: np.ndarray,
+    wq: np.ndarray,
+    wk: np.ndarray,
+    wv: np.ndarray,
+    wo: np.ndarray,
+    n_heads: int,
+    allow: np.ndarray,
+) -> np.ndarray:
+    """Scaled dot-product attention over past tokens only (`allow` is 0/1 mask)."""
+    t, d = x.shape
+    hdim = d // n_heads
 
-    Q = (x @ W_q).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)
-    K = (x @ W_k).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)
-    V = (x @ W_v).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)
+    # Linear maps were saved as PyTorch [out, in]; multiply on the right after .T
+    q = (x @ wq).reshape(t, n_heads, hdim).transpose(1, 0, 2)
+    k = (x @ wk).reshape(t, n_heads, hdim).transpose(1, 0, 2)
+    v = (x @ wv).reshape(t, n_heads, hdim).transpose(1, 0, 2)
 
-    scores = Q @ K.transpose(0, 2, 1) / np.sqrt(d_k)
-    if mask is not None:
-        scores = scores + (1.0 - mask) * -1e9
-
-    attn = softmax(scores, axis=-1)
-    out = attn @ V
-    out = out.transpose(1, 0, 2).reshape(seq_len, d_model)
-    return out @ W_o
-
-
-def feed_forward(x, W1, b1, W2, b2):
-    """Feed-forward network (Module 2, 4)"""
-    return gelu(x @ W1 + b1) @ W2 + b2
-
-
-def transformer_block(x, weights, block_idx, n_heads, mask):
-    """Single transformer block (Module 4)"""
-    prefix = f"blocks.{block_idx}"
-
-    W_q = weights[f"{prefix}.attn.W_q.weight"].T
-    W_k = weights[f"{prefix}.attn.W_k.weight"].T
-    W_v = weights[f"{prefix}.attn.W_v.weight"].T
-    W_o = weights[f"{prefix}.attn.W_o.weight"].T
-
-    x_norm = layer_norm(x, weights[f"{prefix}.norm1.weight"], weights[f"{prefix}.norm1.bias"])
-    x = x + multi_head_attention(x_norm, W_q, W_k, W_v, W_o, n_heads, mask)
-
-    W1 = weights[f"{prefix}.ff.linear1.weight"].T
-    b1 = weights[f"{prefix}.ff.linear1.bias"]
-    W2 = weights[f"{prefix}.ff.linear2.weight"].T
-    b2 = weights[f"{prefix}.ff.linear2.bias"]
-
-    x_norm = layer_norm(x, weights[f"{prefix}.norm2.weight"], weights[f"{prefix}.norm2.bias"])
-    x = x + feed_forward(x_norm, W1, b1, W2, b2)
-    return x
+    logits = (q @ k.transpose(0, 2, 1)) / np.sqrt(hdim)
+    logits = logits + (1.0 - allow) * (-1e9)
+    weights = _softmax(logits, axis=-1)
+    y = (weights @ v).transpose(1, 0, 2).reshape(t, d)
+    return y @ wo
 
 
-def full_transformer(tokens, weights):
-    """Complete transformer inference"""
-    seq_len = len(tokens)
-    x = weights["token_embed.weight"][tokens]
-    x = x + weights["pos_embed.weight"][:seq_len]
-    mask = np.tril(np.ones((seq_len, seq_len)))
-
-    n_layers = int(weights["n_layers"])
-    n_heads = int(weights["n_heads"])
-    for layer_idx in range(n_layers):
-        x = transformer_block(x, weights, layer_idx, n_heads, mask)
-
-    x = layer_norm(x, weights["ln_f.weight"], weights["ln_f.bias"])
-    return x @ weights["lm_head.weight"].T
+def _mlp(x: np.ndarray, w1: np.ndarray, b1: np.ndarray, w2: np.ndarray, b2: np.ndarray) -> np.ndarray:
+    return _gelu(x @ w1 + b1) @ w2 + b2
 
 
-def generate_text(text, weights, vocab, num_words=3, temperature=0.0):
-    """Generate multiple words using FULL transformer"""
-    words = text.split()
-    tokens = [vocab.index(w) for w in words if w in vocab]
-    if not tokens:
-        print(f"No words recognized in '{text}'\n")
+def _one_layer(x: np.ndarray, w: np.lib.npyio.NpzFile, layer: int, n_heads: int, allow: np.ndarray) -> np.ndarray:
+    p = f"blocks.{layer}"
+    # pre-norm attention + residual
+    a = _layernorm(x, w[f"{p}.norm1.weight"], w[f"{p}.norm1.bias"])
+    x = x + _attend(
+        a,
+        w[f"{p}.attn.W_q.weight"].T,
+        w[f"{p}.attn.W_k.weight"].T,
+        w[f"{p}.attn.W_v.weight"].T,
+        w[f"{p}.attn.W_o.weight"].T,
+        n_heads,
+        allow,
+    )
+    # pre-norm feed-forward + residual
+    a = _layernorm(x, w[f"{p}.norm2.weight"], w[f"{p}.norm2.bias"])
+    return x + _mlp(
+        a,
+        w[f"{p}.ff.linear1.weight"].T,
+        w[f"{p}.ff.linear1.bias"],
+        w[f"{p}.ff.linear2.weight"].T,
+        w[f"{p}.ff.linear2.bias"],
+    )
+
+
+def numpy_forward(token_ids: list[int], w: np.lib.npyio.NpzFile) -> np.ndarray:
+    """Return logits for every position: shape (seq, vocab)."""
+    t = len(token_ids)
+    x = w["token_embed.weight"][token_ids] + w["pos_embed.weight"][:t]
+    allow = np.tril(np.ones((t, t)))
+    n_layers, n_heads = int(w["n_layers"]), int(w["n_heads"])
+    for i in range(n_layers):
+        x = _one_layer(x, w, i, n_heads, allow)
+    x = _layernorm(x, w["ln_f.weight"], w["ln_f.bias"])
+    return x @ w["lm_head.weight"].T
+
+
+def continue_prompt(
+    prompt: str,
+    w: np.lib.npyio.NpzFile,
+    vocab: list[str],
+    steps: int = 3,
+    temperature: float = 0.0,
+) -> None:
+    """Print greedy (or sampled) continuations one token at a time."""
+    ids = [vocab.index(tok) for tok in prompt.split() if tok in vocab]
+    if not ids:
+        print(f"skipped (unknown words): {prompt!r}\n")
         return
 
-    print(f"Input: '{text}'")
-    generated = text
-
-    for i in range(num_words):
-        logits = full_transformer(tokens, weights)
-
-        if temperature == 0:
-            next_token = int(np.argmax(logits[-1]))
-            probs = softmax(logits[-1])
+    print(f"> {prompt}")
+    text = prompt
+    for step in range(steps):
+        logits = numpy_forward(ids, w)[-1]
+        if temperature <= 0:
+            probs = _softmax(logits)
+            nxt = int(np.argmax(logits))
         else:
-            probs = softmax(logits[-1] / temperature)
-            next_token = int(np.random.choice(len(vocab), p=probs))
+            probs = _softmax(logits / temperature)
+            nxt = int(np.random.choice(len(vocab), p=probs))
 
-        next_word = vocab[next_token]
-        top_3 = np.argsort(probs)[-3:][::-1]
-        prob_str = " | ".join([f"{vocab[idx]}:{probs[idx]:.1%}" for idx in top_3])
-        print(f"  Step {i+1}: {next_word:12s} [{prob_str}]")
-
-        generated += " " + next_word
-        if next_word == "END":
+        word = vocab[nxt]
+        ranked = np.argsort(probs)[-3:][::-1]
+        tip = ", ".join(f"{vocab[i]} {probs[i]*100:.0f}%" for i in ranked)
+        print(f"  +{step + 1}  {word:<8}  ({tip})")
+        text = f"{text} {word}"
+        if word == "END":
             break
-        tokens.append(next_token)
+        ids.append(nxt)
+    print(f"  => {text}\n")
 
-    print(f"Complete: '{generated}'\n")
+
+def demo(w: np.lib.npyio.NpzFile, vocab: list[str]) -> None:
+    print("--- demos ---")
+    continue_prompt("the big cat sat on the", w, vocab, steps=3)
+    continue_prompt("the red big cat sat on the", w, vocab, steps=3)
+    continue_prompt("the cat and the", w, vocab, steps=2)
+    continue_prompt("the small dog ran to the small", w, vocab, steps=2)
 
 
-# ============================================================================
-# Main
-# ============================================================================
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train / run a tiny English GPT")
+    parser.add_argument("--train", action="store_true", help="retrain and overwrite weights")
+    args = parser.parse_args()
 
-def run_demos(weights, vocab):
-    print("=" * 60)
-    print("Tiny GPT: Multi-Word Text Generation")
-    print("=" * 60)
-    print()
+    if args.train or not WEIGHTS_FILE.exists():
+        train()
 
-    print("1. Long-range attention (remembering 'big' from 6 words back):")
-    generate_text("the big cat sat on the", weights, vocab, num_words=3, temperature=0.0)
-
-    print("2. Selective attention (ignoring color, focusing on size):")
-    generate_text("the red big cat sat on the", weights, vocab, num_words=3, temperature=0.0)
-
-    print("3. Context awareness (preferring variety):")
-    generate_text("the cat and the", weights, vocab, num_words=3, temperature=0.0)
-
-    print("4. Pattern completion (size-matched destination):")
-    generate_text("the small dog ran to the small", weights, vocab, num_words=2, temperature=0.0)
-
-    print("=" * 60)
-    print("What You Just Saw:")
-    print("=" * 60)
-    print("✓ Multi-head attention (4 heads) finding relevant context")
-    print("✓ Causal masking preventing future information leakage")
-    print("✓ Feed-forward networks processing gathered context")
-    print("✓ Layer normalization stabilizing values")
-    print("✓ Residual connections preserving information flow")
-    print("✓ Autoregressive generation (each word feeds into next)")
-    print("\nThis is a REAL transformer - same building blocks as GPT-4,"
-          " just scaled down!")
+    print(f"loading {WEIGHTS_FILE.name} ...")
+    w = np.load(WEIGHTS_FILE, allow_pickle=True)
+    vocab = w["vocab"].tolist()
+    print(
+        f"ready — dim={int(w['d_model'])}, layers={int(w['n_layers'])}, "
+        f"heads={int(w['n_heads'])}, vocab={len(vocab)}\n"
+    )
+    demo(w, vocab)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--train", action="store_true", help="Force retrain")
-    args = parser.parse_args()
-
-    if args.train or not MODEL_PATH.exists():
-        train()
-
-    print("Loading model...")
-    weights = np.load(MODEL_PATH, allow_pickle=True)
-    vocab = weights["vocab"].tolist()
-    print("✓ Model loaded!\n")
-    print(f"Model: {weights['d_model']} dimensions, {weights['n_layers']} layers, {weights['n_heads']} heads")
-    print(f"Vocabulary ({len(vocab)} words): {vocab}\n")
-
-    run_demos(weights, vocab)
+    main()

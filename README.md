@@ -1,18 +1,23 @@
 # Tiny GPT
 
-One file: train a tiny transformer, then run it in plain NumPy.
+Minimal word-level transformer: train in PyTorch, run the forward pass in NumPy.
+
+This project was **inspired by** the idea of a tiny patterned-English GPT
+(small vocab, size/color/`and` demos), but the implementation, comments, and
+presentation are original. The math (attention, GELU, layer norm) is standard
+transformer material from public papers — not unique to any course.
 
 ```bash
 pip install -r requirements.txt
-python tiny_gpt.py          # demos (trains once if no .npz yet)
-python tiny_gpt.py --train  # force retrain
+python tiny_gpt.py          # demos (trains once if weights are missing)
+python tiny_gpt.py --train  # retrain
 ```
 
-| Prompt | Continues with |
-|--------|----------------|
+| Prompt | Typical continuation |
+|--------|----------------------|
 | `the big cat sat on the` | `big mat END` |
 | `the red big cat sat on the` | `big mat END` |
 | `the cat and the` | `dog END` |
 | `the small dog ran to the small` | `house END` |
 
-`d_model=32`, 2 layers, 4 heads. Same building blocks as GPT — just tiny.
+Config: `dim=32`, 2 layers, 4 heads (~26K params).
