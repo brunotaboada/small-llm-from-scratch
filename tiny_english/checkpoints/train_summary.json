@@ -1,6 +1,0 @@
-{
-  "steps": 200,
-  "loss": 0.6526780724525452,
-  "demos_ok": true,
-  "checkpoint": "/workspace/tiny_english/checkpoints/best.pt"
-}
