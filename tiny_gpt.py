@@ -1,212 +1,198 @@
 """
-tiny_gpt.py — A tiny GPT in plain NumPy (same idea as the algo.monster course).
+Tiny English GPT — plain NumPy inference (algo.monster course style).
 
-What this file does:
-  1. Load trained weights from models/tiny_english_gpt.npz
-  2. Run a full transformer forward pass (attention, FFN, etc.)
-  3. Generate a few words, one at a time
-
-No PyTorch here — just NumPy, so you can see every multiply and add.
-Train the weights first with:  python train.py
+Train first:  python train.py
+Then run:     python tiny_gpt.py
 """
 
 import numpy as np
 from pathlib import Path
 
-MODEL_PATH = Path(__file__).parent / "models" / "tiny_english_gpt.npz"
+# Load the pre-trained tiny transformer model
+print("Loading model...")
+weights = np.load(Path(__file__).parent / "models" / "tiny_english_gpt.npz", allow_pickle=True)
+print("✓ Model loaded!\n")
+
+# Show model specifications
+vocab = weights["vocab"].tolist()
+print(f"Model: {weights['d_model']} dimensions, {weights['n_layers']} layers, {weights['n_heads']} heads")
+print(f"Vocabulary ({len(vocab)} words): {vocab}\n")
 
 
-# =============================================================================
-# Small math helpers
-# =============================================================================
+# ============================================================================
+# Full Transformer Implementation
+# ============================================================================
 
 def gelu(x):
-    """Smooth activation used inside the feed-forward layers."""
+    """GELU activation (Module 2)"""
     return 0.5 * x * (1.0 + np.tanh(np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)))
 
 
 def softmax(x, axis=-1):
-    """Turn scores into probabilities that sum to 1."""
-    # Subtract max for numerical stability (doesn't change the result)
-    e = np.exp(x - np.max(x, axis=axis, keepdims=True))
-    return e / np.sum(e, axis=axis, keepdims=True)
+    """Softmax (Module 2)"""
+    exp_x = np.exp(x - np.max(x, axis=axis, keepdims=True))
+    return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
 
 
 def layer_norm(x, weight, bias, eps=1e-5):
-    """Normalize each position's features, then scale + shift with learned params."""
+    """Layer normalization (Module 2)"""
     mean = np.mean(x, axis=-1, keepdims=True)
-    var = np.var(x, axis=-1, keepdims=True)
-    x = (x - mean) / np.sqrt(var + eps)
-    return weight * x + bias
+    variance = np.var(x, axis=-1, keepdims=True)
+    x_norm = (x - mean) / np.sqrt(variance + eps)
+    return weight * x_norm + bias
 
 
-# =============================================================================
-# Transformer pieces
-# =============================================================================
-
-def attention(x, W_q, W_k, W_v, W_o, n_heads, mask):
-    """
-    Multi-head causal self-attention.
-
-    For each word, ask: "which earlier words matter?" then mix their values.
-    The causal mask blocks looking at future words.
-    """
+def multi_head_attention(x, W_q, W_k, W_v, W_o, n_heads, mask=None):
+    """Multi-head attention (Module 3-4)"""
     seq_len, d_model = x.shape
     d_k = d_model // n_heads
 
-    # Project into Queries, Keys, Values  (PyTorch stores W as [out, in], so .T)
-    Q = (x @ W_q).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)  # (heads, seq, d_k)
+    # Q, K, V projections
+    Q = (x @ W_q).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)
     K = (x @ W_k).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)
     V = (x @ W_v).reshape(seq_len, n_heads, d_k).transpose(1, 0, 2)
 
-    # Scores: how much each word should attend to every other word
+    # Attention scores
     scores = Q @ K.transpose(0, 2, 1) / np.sqrt(d_k)
-    scores = scores + (1.0 - mask) * -1e9  # mask future positions
+    if mask is not None:
+        scores = scores + (1.0 - mask) * -1e9
 
-    weights = softmax(scores, axis=-1)     # attention weights
-    out = weights @ V                      # weighted mix of values
+    # Attention weights and output
+    attn = softmax(scores, axis=-1)
+    out = attn @ V
     out = out.transpose(1, 0, 2).reshape(seq_len, d_model)
-    return out @ W_o                       # final linear mix across heads
+    return out @ W_o
 
 
 def feed_forward(x, W1, b1, W2, b2):
-    """Two linear layers with GELU in between (per-word "thinking")."""
+    """Feed-forward network (Module 2, 4)"""
     return gelu(x @ W1 + b1) @ W2 + b2
 
 
-def block(x, w, i, n_heads, mask):
-    """
-    One transformer block:
-      LayerNorm → Attention → residual add
-      LayerNorm → FeedForward → residual add
-    """
-    p = f"blocks.{i}"
+def transformer_block(x, weights, block_idx, n_heads, mask):
+    """Single transformer block (Module 4)"""
+    prefix = f"blocks.{block_idx}"
 
-    # --- Attention ---
-    x_n = layer_norm(x, w[f"{p}.norm1.weight"], w[f"{p}.norm1.bias"])
-    x = x + attention(
-        x_n,
-        w[f"{p}.attn.W_q.weight"].T,
-        w[f"{p}.attn.W_k.weight"].T,
-        w[f"{p}.attn.W_v.weight"].T,
-        w[f"{p}.attn.W_o.weight"].T,
-        n_heads,
-        mask,
-    )
+    # Attention (transpose because PyTorch stores weights as [out, in])
+    W_q = weights[f"{prefix}.attn.W_q.weight"].T
+    W_k = weights[f"{prefix}.attn.W_k.weight"].T
+    W_v = weights[f"{prefix}.attn.W_v.weight"].T
+    W_o = weights[f"{prefix}.attn.W_o.weight"].T
 
-    # --- Feed-forward ---
-    x_n = layer_norm(x, w[f"{p}.norm2.weight"], w[f"{p}.norm2.bias"])
-    x = x + feed_forward(
-        x_n,
-        w[f"{p}.ff.linear1.weight"].T,
-        w[f"{p}.ff.linear1.bias"],
-        w[f"{p}.ff.linear2.weight"].T,
-        w[f"{p}.ff.linear2.bias"],
-    )
+    x_norm = layer_norm(x, weights[f"{prefix}.norm1.weight"], weights[f"{prefix}.norm1.bias"])
+    x = x + multi_head_attention(x_norm, W_q, W_k, W_v, W_o, n_heads, mask)
+
+    # Feed-forward
+    W1 = weights[f"{prefix}.ff.linear1.weight"].T
+    b1 = weights[f"{prefix}.ff.linear1.bias"]
+    W2 = weights[f"{prefix}.ff.linear2.weight"].T
+    b2 = weights[f"{prefix}.ff.linear2.bias"]
+
+    x_norm = layer_norm(x, weights[f"{prefix}.norm2.weight"], weights[f"{prefix}.norm2.bias"])
+    x = x + feed_forward(x_norm, W1, b1, W2, b2)
+
     return x
 
 
-def transformer(tokens, w):
-    """
-    Full forward pass: embeddings → N blocks → final norm → vocab logits.
-
-    tokens: list of integer word ids, e.g. [0, 9, 1, 3, 5, 0] for
-            "the big cat sat on the"
-    returns: logits shaped (seq_len, vocab_size)
-    """
+def full_transformer(tokens, weights):
+    """Complete transformer inference"""
     seq_len = len(tokens)
 
-    # Word embedding + position embedding
-    x = w["token_embed.weight"][tokens]
-    x = x + w["pos_embed.weight"][:seq_len]
+    # Embeddings
+    x = weights["token_embed.weight"][tokens]
+    x = x + weights["pos_embed.weight"][:seq_len]
 
-    # Lower-triangular mask: position i can only see positions <= i
+    # Causal mask
     mask = np.tril(np.ones((seq_len, seq_len)))
 
-    n_layers = int(w["n_layers"])
-    n_heads = int(w["n_heads"])
-    for i in range(n_layers):
-        x = block(x, w, i, n_heads, mask)
+    # Transformer blocks
+    n_layers = int(weights["n_layers"])
+    n_heads = int(weights["n_heads"])
+    for layer_idx in range(n_layers):
+        x = transformer_block(x, weights, layer_idx, n_heads, mask)
 
-    x = layer_norm(x, w["ln_f.weight"], w["ln_f.bias"])
-    logits = x @ w["lm_head.weight"].T  # score for every vocab word
+    # Final layer norm + projection
+    x = layer_norm(x, weights["ln_f.weight"], weights["ln_f.bias"])
+    logits = x @ weights["lm_head.weight"].T
+
     return logits
 
 
-# =============================================================================
-# Generation
-# =============================================================================
+# ============================================================================
+# Predictions
+# ============================================================================
 
-def generate(text, vocab, w, num_words=3, temperature=0.0):
-    """
-    Predict the next words one by one (autoregressive).
-
-    temperature = 0  → always pick the highest-probability word (greedy)
-    temperature > 0  → sample (more random)
-    """
+def generate_text(text, num_words=3, temperature=1.0):
+    """Generate multiple words using FULL transformer"""
     words = text.split()
-    tokens = [vocab.index(word) for word in words if word in vocab]
+    tokens = [vocab.index(w) for w in words if w in vocab]
+
     if not tokens:
-        print(f"No known words in: '{text}'\n")
+        print(f"No words recognized in '{text}'\n")
         return
 
     print(f"Input: '{text}'")
     generated = text
 
-    for step in range(num_words):
-        logits = transformer(tokens, w)
-        last = logits[-1]  # scores for the next word
+    for i in range(num_words):
+        # Run full transformer
+        logits = full_transformer(tokens, weights)
 
+        # Greedy or sampling
         if temperature == 0:
-            probs = softmax(last)
-            next_id = int(np.argmax(last))
+            # Greedy: pick highest
+            next_token = np.argmax(logits[-1])
+            probs = softmax(logits[-1])
         else:
-            probs = softmax(last / temperature)
-            next_id = int(np.random.choice(len(vocab), p=probs))
+            # Sample with temperature
+            probs = softmax(logits[-1] / temperature)
+            next_token = np.random.choice(len(vocab), p=probs)
 
-        next_word = vocab[next_id]
+        next_word = vocab[next_token]
 
-        # Show top-3 guesses
-        top3 = np.argsort(probs)[-3:][::-1]
-        tip = " | ".join(f"{vocab[i]}:{probs[i]:.1%}" for i in top3)
-        print(f"  Step {step + 1}: {next_word:12s} [{tip}]")
+        # Show probabilities for this step
+        top_3 = np.argsort(probs)[-3:][::-1]
+        prob_str = " | ".join([f"{vocab[idx]}:{probs[idx]:.1%}" for idx in top_3])
+        print(f"  Step {i+1}: {next_word:12s} [{prob_str}]")
 
-        generated += " " + next_word
+        # Stop at END
         if next_word == "END":
+            generated += " " + next_word
             break
-        tokens.append(next_id)
+
+        # Append to sequence
+        generated += " " + next_word
+        tokens.append(next_token)
 
     print(f"Complete: '{generated}'\n")
 
 
-# =============================================================================
-# Run demos
-# =============================================================================
+# Try different inputs - demonstrating transformer capabilities
+print("=" * 60)
+print("Tiny GPT: Multi-Word Text Generation")
+print("=" * 60)
+print()
 
-def main():
-    print("Loading model...")
-    w = np.load(MODEL_PATH, allow_pickle=True)
-    vocab = w["vocab"].tolist()
-    print("Model loaded!\n")
-    print(f"Size: d_model={w['d_model']}, layers={w['n_layers']}, heads={w['n_heads']}")
-    print(f"Vocab ({len(vocab)}): {vocab}\n")
+print("1. Long-range attention (remembering 'big' from 6 words back):")
+generate_text("the big cat sat on the", num_words=3, temperature=0.0)
 
-    print("=" * 60)
-    print("Tiny GPT demos")
-    print("=" * 60 + "\n")
+print("2. Selective attention (ignoring color, focusing on size):")
+generate_text("the red big cat sat on the", num_words=3, temperature=0.0)
 
-    print("1. Long-range attention (remember 'big'):")
-    generate("the big cat sat on the", vocab, w, num_words=3, temperature=0.0)
+print("3. Context awareness (preferring variety):")
+generate_text("the cat and the", num_words=3, temperature=0.0)
 
-    print("2. Selective attention (ignore color, use size):")
-    generate("the red big cat sat on the", vocab, w, num_words=3, temperature=0.0)
+print("4. Pattern completion (size-matched destination):")
+generate_text("the small dog ran to the small", num_words=2, temperature=0.0)
 
-    print("3. Prefer variety after 'and':")
-    generate("the cat and the", vocab, w, num_words=3, temperature=0.0)
-
-    print("4. Pattern completion (size-matched object):")
-    generate("the small dog ran to the small", vocab, w, num_words=2, temperature=0.0)
-
-
-if __name__ == "__main__":
-    main()
+print("=" * 60)
+print("What You Just Saw:")
+print("=" * 60)
+print("✓ Multi-head attention (4 heads) finding relevant context")
+print("✓ Causal masking preventing future information leakage")
+print("✓ Feed-forward networks processing gathered context")
+print("✓ Layer normalization stabilizing values")
+print("✓ Residual connections preserving information flow")
+print("✓ Autoregressive generation (each word feeds into next)")
+print("\nThis is a REAL transformer - same building blocks as GPT-4,"
+      " just scaled down!")
