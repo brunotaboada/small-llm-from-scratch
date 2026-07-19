@@ -2,8 +2,6 @@ __pycache__/
 *.pyc
 *.pyo
 .ipynb_checkpoints/
-tiny_english/checkpoints/
 *.log
 .DS_Store
-core
 .venv/
