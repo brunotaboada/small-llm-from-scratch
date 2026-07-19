@@ -2,15 +2,14 @@
 
 Minimal word-level transformer: train in PyTorch, run the forward pass in NumPy.
 
-This project was **inspired by** the idea of a tiny patterned-English GPT
-(small vocab, size/color/`and` demos), but the implementation, comments, and
-presentation are original. The math (attention, GELU, layer norm) is standard
-transformer material from public papers — not unique to any course.
+Inspired by the idea of a tiny patterned-English GPT (small vocab, size/color/`and`
+demos). The code and presentation are original to this project; the math (attention,
+GELU, layer norm) is standard transformer material.
 
 ```bash
 pip install -r requirements.txt
-python tiny_gpt.py          # demos (trains once if weights are missing)
-python tiny_gpt.py --train  # retrain
+python train.py    # train + write models/tiny_english_gpt.npz
+python infer.py    # NumPy demos
 ```
 
 | Prompt | Typical continuation |
@@ -19,5 +18,8 @@ python tiny_gpt.py --train  # retrain
 | `the red big cat sat on the` | `big mat END` |
 | `the cat and the` | `dog END` |
 | `the small dog ran to the small` | `house END` |
+
+- `train.py` — data, model, training loop, export `.npz`
+- `infer.py` — load weights, NumPy forward pass, demos
 
 Config: `dim=32`, 2 layers, 4 heads (~26K params).
