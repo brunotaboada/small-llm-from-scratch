@@ -2,13 +2,8 @@ __pycache__/
 *.pyc
 *.pyo
 .ipynb_checkpoints/
-checkpoints/*.pt
 tiny_english/checkpoints/
-data/*.txt
-tokenizer_model/
 *.log
 .DS_Store
 core
 .venv/
-**/__pycache__/
-*.pyc
