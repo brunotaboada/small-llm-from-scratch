@@ -24,3 +24,5 @@ python infer.py    # load .npz and generate
 - `infer.py` — NumPy forward pass; read the `-1e9` note at the top
 
 Config: `dim=32`, 2 layers, 4 heads (~26K params).
+
+Longer walkthrough (beginner blog): open [`blog_post.html`](blog_post.html) in a browser.

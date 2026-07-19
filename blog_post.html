@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>I Built a 20-Word GPT — And You Can Read Every Line</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --ink: #14221c;
+            --muted: #4a5c54;
+            --paper: #f3f6f2;
+            --surface: #fbfcf9;
+            --accent: #0f6e56;
+            --accent-deep: #0a4f3d;
+            --wash: #d8ebe3;
+            --code-bg: #1a2420;
+            --code-text: #d7e6df;
+            --border: #c9d6cf;
+            --warn-bg: #fff4e5;
+            --warn-border: #c47b2b;
+            --max: 46rem;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: "Source Sans 3", sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(1200px 500px at 10% -10%, #dceee6 0%, transparent 55%),
+                radial-gradient(900px 420px at 100% 0%, #e7efe4 0%, transparent 50%),
+                var(--paper);
+            line-height: 1.75;
+        }
+
+        .hero {
+            padding: clamp(3.5rem, 8vw, 6rem) 1.5rem 3.5rem;
+            text-align: left;
+            max-width: calc(var(--max) + 4rem);
+            margin: 0 auto;
+        }
+
+        .hero .brand {
+            font-family: "Fraunces", serif;
+            font-size: clamp(2.4rem, 6vw, 3.6rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--accent-deep);
+            line-height: 1.05;
+            margin-bottom: 1rem;
+        }
+
+        .hero h1 {
+            font-family: "Fraunces", serif;
+            font-size: clamp(1.35rem, 3vw, 1.75rem);
+            font-weight: 500;
+            color: var(--ink);
+            max-width: 34rem;
+            line-height: 1.35;
+            margin-bottom: 0.85rem;
+        }
+
+        .hero .lede {
+            max-width: 34rem;
+            color: var(--muted);
+            font-size: 1.08rem;
+        }
+
+        .hero .meta {
+            margin-top: 1.25rem;
+            color: var(--muted);
+            font-size: 0.92rem;
+        }
+
+        article {
+            max-width: var(--max);
+            margin: 0 auto 4rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: clamp(1.6rem, 4vw, 2.75rem);
+        }
+
+        h2 {
+            font-family: "Fraunces", serif;
+            font-size: 1.55rem;
+            margin: 2.4rem 0 0.85rem;
+            color: var(--accent-deep);
+            line-height: 1.25;
+        }
+
+        h3 {
+            font-family: "Fraunces", serif;
+            font-size: 1.15rem;
+            margin: 1.7rem 0 0.55rem;
+        }
+
+        p { margin: 0 0 1rem; }
+
+        a { color: var(--accent); }
+
+        ul, ol { margin: 0 0 1.1rem 1.25rem; }
+        li { margin-bottom: 0.4rem; }
+
+        strong { font-weight: 700; }
+        em { font-style: italic; }
+
+        .callout {
+            background: var(--wash);
+            border-left: 4px solid var(--accent);
+            padding: 0.95rem 1.1rem;
+            margin: 1.3rem 0;
+        }
+
+        .callout.warn {
+            background: var(--warn-bg);
+            border-left-color: var(--warn-border);
+        }
+
+        pre {
+            font-family: "Source Code Pro", monospace;
+            background: var(--code-bg);
+            color: var(--code-text);
+            padding: 1rem 1.1rem;
+            overflow-x: auto;
+            font-size: 0.86rem;
+            line-height: 1.55;
+            margin: 1rem 0 1.3rem;
+        }
+
+        code {
+            font-family: "Source Code Pro", monospace;
+            font-size: 0.9em;
+            background: var(--wash);
+            padding: 0.1em 0.35em;
+        }
+
+        pre code { background: none; padding: 0; color: inherit; }
+
+        .kw { color: #7dd3b0; }
+        .fn { color: #9fd4ff; }
+        .st { color: #f0c674; }
+        .nb { color: #e8a87c; }
+        .cm { color: #8aa396; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0 1.4rem;
+            font-size: 0.95rem;
+        }
+
+        th, td {
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            padding: 0.55rem 0.4rem;
+            vertical-align: top;
+        }
+
+        th { color: var(--accent-deep); font-weight: 700; }
+
+        .arch {
+            font-family: "Source Code Pro", monospace;
+            font-size: 0.82rem;
+            background: #eef5f0;
+            border: 1px solid var(--border);
+            padding: 1rem;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.45;
+            margin: 1rem 0 1.3rem;
+        }
+
+        .demo {
+            border-top: 1px solid var(--border);
+            padding: 0.85rem 0;
+        }
+
+        .demo .prompt { color: var(--accent-deep); font-weight: 700; }
+
+        footer {
+            max-width: var(--max);
+            margin: 0 auto 3rem;
+            color: var(--muted);
+            font-size: 0.92rem;
+            padding: 0 1rem;
+        }
+
+        @media (max-width: 640px) {
+            article { border-left: none; border-right: none; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="hero">
+    <p class="brand">Tiny GPT</p>
+    <h1>I built a 20-word language model you can actually finish reading</h1>
+    <p class="lede">
+        Not a billion-parameter mystery box. Two Python files, ~26K weights,
+        and demos that really work — including why that weird <code>-1e9</code> shows up in attention.
+    </p>
+    <p class="meta">Beginner walkthrough · PyTorch train · NumPy infer</p>
+</header>
+
+<article>
+
+<h2>Why bother with a toy model?</h2>
+
+<p>Big chatbots are impressive, but they’re terrible teachers. You call an API, text comes back, and you’re no closer to knowing what “attention” actually does.</p>
+
+<p>So I built the smallest GPT I could still learn from:</p>
+
+<ul>
+    <li><strong>20 words</strong> in the vocabulary (including <code>PAD</code> and <code>END</code>)</li>
+    <li><strong>~26,000 parameters</strong> — trains on a laptop in seconds</li>
+    <li><strong>Two files:</strong> <code>train.py</code> (learn weights) and <code>infer.py</code> (run every multiply in NumPy)</li>
+</ul>
+
+<p>The point isn’t “beat ChatGPT.” The point is: after an evening with this repo, attention, masking, and next-word training stop feeling mystical.</p>
+
+<div class="callout">
+    <strong>Inspiration, not a copy.</strong> The <em>idea</em> of a tiny patterned-English GPT is floating around teaching materials. The code, comments, and wording here are original. The math (dot-product attention, GELU, layer norm) is standard public knowledge from transformer papers.
+</div>
+
+<h2>What the model is allowed to say</h2>
+
+<p>Every token is a whole word. No BPE. The full dictionary is:</p>
+
+<pre>the cat dog sat ran on mat house a big
+small quickly slowly and is red blue to PAD END</pre>
+
+<p>Training sentences are hand-written so three behaviors can emerge:</p>
+
+<ol>
+    <li><strong>Size matching</strong> — <em>big</em> animals go with <em>big mat / big house</em></li>
+    <li><strong>Color as noise</strong> — <em>red</em> / <em>blue</em> appear, but shouldn’t pick the object by themselves</li>
+    <li><strong>Variety after “and”</strong> — <em>the cat and the dog</em> shows up more than repeating the same animal</li>
+</ol>
+
+<p>That’s enough structure for a tiny network to learn long-range attention without needing Wikipedia.</p>
+
+<h2>Attention in plain language</h2>
+
+<p>Read: <em>“The big cat sat on the ___.”</em></p>
+
+<p>To fill the blank well, the model needs to remember <strong>big</strong> from earlier — not just the last word <strong>the</strong>. Attention is the mechanism that lets each word look back and decide “how much should I care about each earlier word?”</p>
+
+<p>For every word we build three vectors:</p>
+
+<ul>
+    <li><strong>Query</strong> — what am I looking for?</li>
+    <li><strong>Key</strong> — what do I advertise?</li>
+    <li><strong>Value</strong> — what content do I pass along if someone attends to me?</li>
+</ul>
+
+<p>Score = how aligned Query and Key are (a dot product). Softmax turns scores into percentages. Then we mix Values with those percentages. That’s it.</p>
+
+<div class="callout">
+    <strong>Why divide by √d?</strong>
+    Without scaling, scores get huge as vector size grows. Softmax then becomes nearly “100% on one word.” Dividing by the square root of the head size keeps attention soft enough to blend several words.
+</div>
+
+<h3>The famous <code>-1e9</code> (causal mask)</h3>
+
+<p>When predicting the next word, peeking at the future is cheating. So we build a triangular allow-mask:</p>
+
+<pre>position i may look at 0..i only
+
+1 0 0 0
+1 1 0 0
+1 1 1 0
+1 1 1 1</pre>
+
+<p>Where the mask is 0 (future), we add <strong><code>-1e9</code></strong> — negative one billion — to the attention score. After softmax, <code>e^(-1e9) ≈ 0</code>, so that future word gets ~0% attention.</p>
+
+<p>In PyTorch training we often use <code>-inf</code> for the same job. In NumPy inference, <code>-1e9</code> is a practical stand-in: strong enough to wipe the entry, usually safe in float32.</p>
+
+<pre><span class="cm"># from infer.py — mask future positions before softmax</span>
+logits = (q @ k.transpose(<span class="nb">0</span>, <span class="nb">2</span>, <span class="nb">1</span>)) / np.sqrt(hdim)
+logits = logits + (<span class="nb">1.0</span> - allow) * (-<span class="nb">1e9</span>)
+weights = _softmax(logits, axis=-<span class="nb">1</span>)</pre>
+
+<h2>The whole architecture (tiny edition)</h2>
+
+<div class="arch">words → ids
+  → token embedding + position embedding
+  → ×2 blocks:
+       LayerNorm → multi-head attention → residual add
+       LayerNorm → GELU MLP → residual add
+  → final LayerNorm → vocab logits
+  → pick next word, append, repeat</div>
+
+<table>
+    <thead>
+        <tr><th>Knob</th><th>Value</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Vocab</td><td>20</td><td>Only these words exist</td></tr>
+        <tr><td>DIM</td><td>32</td><td>Numbers per word inside the net</td></tr>
+        <tr><td>Layers</td><td>2</td><td>Stacked transformer blocks</td></tr>
+        <tr><td>Heads</td><td>4</td><td>Parallel attention views (8 dims each)</td></tr>
+        <tr><td>Context</td><td>16</td><td>Max words per training example</td></tr>
+        <tr><td>Params</td><td>~26K</td><td>Laptop-friendly</td></tr>
+    </tbody>
+</table>
+
+<p>Residuals (the <code>x = x + …</code> lines) matter more than they look. Each block only has to learn a small update on top of the old signal, which keeps deep stacks trainable.</p>
+
+<h2>Training: nudge until the demos pass</h2>
+
+<p>Training is next-word prediction:</p>
+
+<pre><span class="cm"># sentence: the big cat END</span>
+<span class="cm"># input:    the  big  cat</span>
+<span class="cm"># target:   big  cat  END</span></pre>
+
+<p>The loop in <code>train.py</code> is deliberately short:</p>
+
+<pre><span class="kw">for</span> each batch:
+    logits, loss = model(inputs, targets)  <span class="cm"># how surprised are we?</span>
+    loss.backward()                        <span class="cm"># who to blame?</span>
+    optimizer.step()                       <span class="cm"># nudge weights</span></pre>
+
+<p>Every 50 steps we run four smoke tests. When they all pass, we export <code>models/tiny_english_gpt.npz</code> for NumPy inference. On my machine that usually happens around a couple hundred steps.</p>
+
+<h2>Results you can verify</h2>
+
+<p>This is the part I care about for teaching: the outputs aren’t random mush. Greedy decoding does this:</p>
+
+<div class="demo">
+    <span class="prompt">Prompt:</span> the big cat sat on the<br>
+    <strong>Continuation:</strong> big mat END
+</div>
+<div class="demo">
+    <span class="prompt">Prompt:</span> the red big cat sat on the<br>
+    <strong>Continuation:</strong> big mat END <em>(color ignored; size used)</em>
+</div>
+<div class="demo">
+    <span class="prompt">Prompt:</span> the cat and the<br>
+    <strong>Continuation:</strong> dog END
+</div>
+<div class="demo">
+    <span class="prompt">Prompt:</span> the small dog ran to the small<br>
+    <strong>Continuation:</strong> house END
+</div>
+
+<p>Those four lines are why the corpus is patterned. You’re watching attention reach backward, ignore distractors, and complete a structure — at a scale you can hold in your head.</p>
+
+<h2>Two files, two jobs</h2>
+
+<ul>
+    <li><code>train.py</code> — vocabulary, hand-built sentences, PyTorch model, training loop, export <code>.npz</code>. Start here.</li>
+    <li><code>infer.py</code> — load the weights and run the forward pass in NumPy only. Read the <code>-1e9</code> note at the top.</li>
+</ul>
+
+<pre>pip install -r requirements.txt
+python train.py
+python infer.py</pre>
+
+<p>Repo: <a href="https://github.com/brunotaboada/small-llm-from-scratch">github.com/brunotaboada/small-llm-from-scratch</a></p>
+
+<h2>What I actually learned</h2>
+
+<ul>
+    <li><strong>Transformers aren’t magic</strong> — embeddings, attention, MLP, residuals, repeat.</li>
+    <li><strong>Masking is a teaching moment</strong> — once <code>-1e9</code> / <code>-inf</code> clicks, “causal LM” stops being jargon.</li>
+    <li><strong>Tiny data can teach real behaviors</strong> if you design the patterns on purpose.</li>
+    <li><strong>Separate train vs infer</strong> makes the story clearer: autograd to learn, NumPy to see every multiply.</li>
+</ul>
+
+<div class="callout warn">
+    <strong>Honest limit:</strong> this model only knows 20 words. Type anything outside the vocab and it can’t help you. That’s a feature for learning — you see the vocabulary wall immediately.
+</div>
+
+<h2>If you’re stuck</h2>
+
+<p>Read <code>train.py</code> top to bottom, then <code>infer.py</code>. When a constant looks spooky (<code>-1e9</code>, <code>1e-5</code>, <code>1/sqrt(d)</code>), the comment above it is there on purpose.</p>
+
+<p>You don’t need a cluster. You need curiosity and a terminal.</p>
+
+</article>
+
+<footer>
+    Tiny GPT · train in PyTorch · infer in NumPy · built to be readable
+</footer>
+
+</body>
+</html>
