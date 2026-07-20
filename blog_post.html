@@ -3,691 +3,390 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>I Built a Tiny Language Model from Scratch — Here's What I Learned</title>
+    <title>I Built a 20-Word GPT — And You Can Read Every Line</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap" rel="stylesheet">
     <style>
-        /* ── Reset & Base ─────────────────────────────── */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg: #fafafa;
-            --surface: #ffffff;
-            --text: #1a1a2e;
-            --text-muted: #555;
-            --accent: #6c63ff;
-            --accent-light: #eeedff;
-            --code-bg: #1e1e2e;
-            --code-text: #cdd6f4;
-            --border: #e2e2e2;
-            --gradient-start: #6c63ff;
-            --gradient-end: #e91e8c;
-            --callout-bg: #f0f4ff;
-            --callout-border: #6c63ff;
-            --max-width: 780px;
+            --ink: #14221c;
+            --muted: #4a5c54;
+            --paper: #f3f6f2;
+            --surface: #fbfcf9;
+            --accent: #0f6e56;
+            --accent-deep: #0a4f3d;
+            --wash: #d8ebe3;
+            --code-bg: #1a2420;
+            --code-text: #d7e6df;
+            --border: #c9d6cf;
+            --warn-bg: #fff4e5;
+            --warn-border: #c47b2b;
+            --max: 46rem;
         }
 
         html { scroll-behavior: smooth; }
 
         body {
-            font-family: 'Georgia', 'Times New Roman', serif;
-            line-height: 1.8;
-            color: var(--text);
-            background: var(--bg);
+            font-family: "Source Sans 3", sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(1200px 500px at 10% -10%, #dceee6 0%, transparent 55%),
+                radial-gradient(900px 420px at 100% 0%, #e7efe4 0%, transparent 50%),
+                var(--paper);
+            line-height: 1.75;
         }
 
-        /* ── Hero / Header ────────────────────────────── */
         .hero {
-            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            color: #fff;
-            padding: 5rem 2rem 4rem;
-            text-align: center;
+            padding: clamp(3.5rem, 8vw, 6rem) 1.5rem 3.5rem;
+            text-align: left;
+            max-width: calc(var(--max) + 4rem);
+            margin: 0 auto;
         }
+
+        .hero .brand {
+            font-family: "Fraunces", serif;
+            font-size: clamp(2.4rem, 6vw, 3.6rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            color: var(--accent-deep);
+            line-height: 1.05;
+            margin-bottom: 1rem;
+        }
+
         .hero h1 {
-            font-size: clamp(1.8rem, 4.5vw, 2.8rem);
-            max-width: 700px;
-            margin: 0 auto 1rem;
-            line-height: 1.25;
-            font-weight: 800;
+            font-family: "Fraunces", serif;
+            font-size: clamp(1.35rem, 3vw, 1.75rem);
+            font-weight: 500;
+            color: var(--ink);
+            max-width: 34rem;
+            line-height: 1.35;
+            margin-bottom: 0.85rem;
         }
+
+        .hero .lede {
+            max-width: 34rem;
+            color: var(--muted);
+            font-size: 1.08rem;
+        }
+
         .hero .meta {
-            font-size: 0.95rem;
-            opacity: 0.85;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin-top: 1.25rem;
+            color: var(--muted);
+            font-size: 0.92rem;
         }
-        .hero .meta span + span::before { content: " · "; }
 
-        /* ── Article body ─────────────────────────────── */
         article {
-            max-width: var(--max-width);
-            margin: -2rem auto 4rem;
+            max-width: var(--max);
+            margin: 0 auto 4rem;
             background: var(--surface);
-            border-radius: 12px;
-            box-shadow: 0 4px 24px rgba(0,0,0,.06);
-            padding: 3rem 2.5rem;
+            border: 1px solid var(--border);
+            padding: clamp(1.6rem, 4vw, 2.75rem);
         }
-        @media (max-width: 600px) { article { padding: 2rem 1.2rem; margin-top: -1rem; } }
 
-        /* ── Typography ──────────────────────────────── */
         h2 {
-            font-size: 1.65rem;
-            margin: 2.8rem 0 1rem;
-            color: var(--accent);
-            border-bottom: 2px solid var(--accent-light);
-            padding-bottom: .4rem;
+            font-family: "Fraunces", serif;
+            font-size: 1.55rem;
+            margin: 2.4rem 0 0.85rem;
+            color: var(--accent-deep);
+            line-height: 1.25;
         }
-        h3 {
-            font-size: 1.25rem;
-            margin: 2rem 0 .6rem;
-        }
-        p { margin: 0 0 1.2rem; }
-        a { color: var(--accent); text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        strong { color: #111; }
-        ul, ol { margin: 0 0 1.2rem 1.4rem; }
-        li { margin-bottom: .45rem; }
-        img { max-width: 100%; height: auto; border-radius: 8px; margin: 1.5rem 0; }
 
-        /* ── Code blocks ─────────────────────────────── */
+        h3 {
+            font-family: "Fraunces", serif;
+            font-size: 1.15rem;
+            margin: 1.7rem 0 0.55rem;
+        }
+
+        p { margin: 0 0 1rem; }
+
+        a { color: var(--accent); }
+
+        ul, ol { margin: 0 0 1.1rem 1.25rem; }
+        li { margin-bottom: 0.4rem; }
+
+        strong { font-weight: 700; }
+        em { font-style: italic; }
+
+        .callout {
+            background: var(--wash);
+            border-left: 4px solid var(--accent);
+            padding: 0.95rem 1.1rem;
+            margin: 1.3rem 0;
+        }
+
+        .callout.warn {
+            background: var(--warn-bg);
+            border-left-color: var(--warn-border);
+        }
+
         pre {
+            font-family: "Source Code Pro", monospace;
             background: var(--code-bg);
             color: var(--code-text);
-            border-radius: 10px;
-            padding: 1.4rem 1.6rem;
+            padding: 1rem 1.1rem;
             overflow-x: auto;
-            font-size: 0.88rem;
-            line-height: 1.65;
-            margin: 1.4rem 0 1.6rem;
-            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-        }
-        code {
-            font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-        }
-        :not(pre) > code {
-            background: var(--accent-light);
-            padding: 2px 6px;
-            border-radius: 4px;
-            color: var(--accent);
-        }
-
-        /* syntax highlights (hand-rolled, lightweight) */
-        .kw { color: #c678dd; }   /* keyword */
-        .fn { color: #61afef; }   /* function */
-        .cm { color: #6a6a8a; font-style: italic; }  /* comment */
-        .st { color: #98c379; }   /* string */
-        .nb { color: #e5c07b; }   /* number / builtin */
-        .op { color: #56b6c2; }   /* operator */
-
-        /* ── Callout / tip boxes ─────────────────────── */
-        .callout {
-            background: var(--callout-bg);
-            border-left: 4px solid var(--callout-border);
-            border-radius: 0 8px 8px 0;
-            padding: 1.1rem 1.4rem;
-            margin: 1.6rem 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 0.95rem;
-        }
-        .callout.warn {
-            background: #fff8e1;
-            border-color: #ffb300;
-        }
-
-        /* ── Stats grid ──────────────────────────────── */
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin: 1.5rem 0;
-        }
-        .stat-card {
-            background: var(--accent-light);
-            border-radius: 10px;
-            padding: 1.2rem 1rem;
-            text-align: center;
-        }
-        .stat-card .num {
-            font-size: 1.6rem;
-            font-weight: 700;
-            color: var(--accent);
-            display: block;
-        }
-        .stat-card .label {
-            font-size: 0.82rem;
-            color: var(--text-muted);
-            font-family: -apple-system, sans-serif;
-        }
-
-        /* ── Architecture diagram (ASCII → styled) ──── */
-        .arch-diagram {
-            background: var(--code-bg);
-            color: #89b4fa;
-            border-radius: 10px;
-            padding: 1.4rem 1.6rem;
-            font-family: 'Fira Code', 'Consolas', monospace;
-            font-size: 0.82rem;
+            font-size: 0.86rem;
             line-height: 1.55;
-            overflow-x: auto;
-            margin: 1.5rem 0;
-            white-space: pre;
+            margin: 1rem 0 1.3rem;
         }
 
-        /* ── Loss chart (pure CSS sparkline-ish) ────── */
-        .loss-table {
+        code {
+            font-family: "Source Code Pro", monospace;
+            font-size: 0.9em;
+            background: var(--wash);
+            padding: 0.1em 0.35em;
+        }
+
+        pre code { background: none; padding: 0; color: inherit; }
+
+        .kw { color: #7dd3b0; }
+        .fn { color: #9fd4ff; }
+        .st { color: #f0c674; }
+        .nb { color: #e8a87c; }
+        .cm { color: #8aa396; }
+
+        table {
             width: 100%;
             border-collapse: collapse;
-            margin: 1.2rem 0;
-            font-family: -apple-system, sans-serif;
-            font-size: 0.9rem;
+            margin: 1rem 0 1.4rem;
+            font-size: 0.95rem;
         }
-        .loss-table th, .loss-table td {
-            padding: .55rem .8rem;
-            text-align: left;
+
+        th, td {
             border-bottom: 1px solid var(--border);
-        }
-        .loss-table th { font-weight: 600; color: var(--text-muted); font-size: .82rem; text-transform: uppercase; letter-spacing: .5px; }
-        .bar-cell { position: relative; }
-        .bar {
-            height: 8px;
-            border-radius: 4px;
-            background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
+            text-align: left;
+            padding: 0.55rem 0.4rem;
+            vertical-align: top;
         }
 
-        /* ── CTA button ──────────────────────────────── */
-        .cta {
-            display: inline-block;
-            background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-            color: #fff;
-            padding: .9rem 2.2rem;
-            border-radius: 30px;
-            font-family: -apple-system, sans-serif;
-            font-weight: 600;
-            font-size: 1rem;
-            text-decoration: none;
-            transition: transform .15s, box-shadow .15s;
-        }
-        .cta:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(108,99,255,.35); text-decoration: none; }
+        th { color: var(--accent-deep); font-weight: 700; }
 
-        /* ── Footer ──────────────────────────────────── */
-        footer {
-            text-align: center;
-            padding: 2rem;
-            font-size: .85rem;
-            color: var(--text-muted);
-            font-family: -apple-system, sans-serif;
-        }
-
-        /* ── Generated text example boxes ────────────── */
-        .gen-example {
-            background: #f8f8f8;
+        .arch {
+            font-family: "Source Code Pro", monospace;
+            font-size: 0.82rem;
+            background: #eef5f0;
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 1rem 1.2rem;
-            margin: 1rem 0;
-            font-family: 'Fira Code', monospace;
-            font-size: 0.85rem;
-            line-height: 1.6;
-            color: #333;
+            padding: 1rem;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.45;
+            margin: 1rem 0 1.3rem;
         }
-        .gen-example .prompt { color: var(--accent); font-weight: 700; }
+
+        .demo {
+            border-top: 1px solid var(--border);
+            padding: 0.85rem 0;
+        }
+
+        .demo .prompt { color: var(--accent-deep); font-weight: 700; }
+
+        footer {
+            max-width: var(--max);
+            margin: 0 auto 3rem;
+            color: var(--muted);
+            font-size: 0.92rem;
+            padding: 0 1rem;
+        }
+
+        @media (max-width: 640px) {
+            article { border-left: none; border-right: none; }
+        }
     </style>
 </head>
 <body>
 
-<!-- ════════════════════════════════════════════════════════════════ -->
-<!-- HERO -->
-<!-- ════════════════════════════════════════════════════════════════ -->
-<div class="hero">
-    <h1>I Built a Tiny Language Model from Scratch&nbsp;— Here's What I&nbsp;Learned</h1>
-    <p class="meta">
-        <span>~12 min read</span>
-        <span>Beginner-friendly</span>
-        <span>Transformers, PyTorch, GPT</span>
+<header class="hero">
+    <p class="brand">Tiny GPT</p>
+    <h1>I built a 20-word language model you can actually finish reading</h1>
+    <p class="lede">
+        Not a billion-parameter mystery box. Two Python files, ~26K weights,
+        and demos that really work — including why that weird <code>-1e9</code> shows up in attention.
     </p>
-</div>
+    <p class="meta">Beginner walkthrough · PyTorch train · NumPy infer</p>
+</header>
 
-<!-- ════════════════════════════════════════════════════════════════ -->
-<!-- ARTICLE -->
-<!-- ════════════════════════════════════════════════════════════════ -->
 <article>
 
-<!-- ── 1. INTRO ──────────────────────────────────────────────────── -->
-<h2>Why I Decided to Build an LLM from Scratch</h2>
+<h2>Why bother with a toy model?</h2>
 
-<p>Okay, I'll be honest — when I first heard people say "I trained my own language model," I thought they were full of it. Or maybe just really, really rich. ChatGPT, GPT-4, LLaMA — these things have <em>billions</em> of parameters and cost millions to train. Who's doing that in their spare time?</p>
+<p>Big chatbots are impressive, but they’re terrible teachers. You call an API, text comes back, and you’re no closer to knowing what “attention” actually does.</p>
 
-<p>But then I started actually reading about how they work, and... huh. Turns out <strong>the core ideas are way more approachable than I expected.</strong> Not easy, exactly, but not the scary PhD-level math I'd imagined. The whole architecture fits in a few hundred lines of Python. And you can genuinely build a tiny version on your laptop that learns to produce (vaguely) coherent text in under two minutes.</p>
-
-<p>So I went ahead and did it. I built a 1.3-million-parameter GPT-style model, trained it on children's stories, and sat there watching it go from random gibberish to stringing together real-ish words. It's definitely not writing anyone's essays anytime soon, but honestly? Building this thing taught me more about how LLMs work than months of reading tutorials and watching YouTube videos.</p>
-
-<p>Here's everything I learned. No PhD required, I promise.</p>
-
-<!-- ── 2. WHAT IS A TRANSFORMER ──────────────────────────────────── -->
-<h2>What Is a Transformer, Really?</h2>
-
-<p>Let's forget the jargon for a second. Read this sentence: <em>"The cat sat on the mat because <strong>it</strong> was tired."</em></p>
-
-<p>When you hit the word "it," your brain just <em>knows</em> it means "the cat," not "the mat." You don't even think about it. Your brain automatically pays attention to the right words based on context.</p>
-
-<p><strong>That's basically what a Transformer does.</strong> For every word in a sentence, it figures out which other words matter most for understanding it. The whole trick comes down to one word: <em>attention</em>.</p>
-
-<p>Before Transformers showed up in 2017 (that famous "Attention Is All You Need" paper — great title, honestly), language models had to read words one-by-one, left to right. Imagine reading with a tiny flashlight that only illuminates one word at a time. Transformers tossed that flashlight and turned on the floodlights — the model sees the <em>whole sentence at once</em> and decides what to focus on.</p>
-
-<div class="callout">
-    <strong>🍕 Pizza analogy:</strong> Think of older models (RNNs) as eating a pizza one bite at a time in order — you can't taste slice 5 until you've finished slices 1-4. A Transformer is like looking at the entire pizza, deciding which slices look best, and eating them in any order. Way more efficient.
-</div>
-
-<!-- ── 3. THE ATTENTION MECHANISM ─────────────────────────────────── -->
-<h2>The Attention Mechanism: The Secret Sauce</h2>
-
-<p>Okay, so this is the part that actually made things click for me. The attention mechanism is basically a tiny search engine running inside the model.</p>
-
-<p>Each word in a sentence asks three questions:</p>
+<p>So I built the smallest GPT I could still learn from:</p>
 
 <ul>
-    <li><strong>Query (Q):</strong> "What kind of information am I looking for?" — like typing a search query into Google.</li>
-    <li><strong>Key (K):</strong> "What kind of information do I have?" — like the title/tags on a web page.</li>
-    <li><strong>Value (V):</strong> "Here's my actual content." — like the actual content on that web page.</li>
+    <li><strong>20 words</strong> in the vocabulary (including <code>PAD</code> and <code>END</code>)</li>
+    <li><strong>~26,000 parameters</strong> — trains on a laptop in seconds</li>
+    <li><strong>Two files:</strong> <code>train.py</code> (learn weights) and <code>infer.py</code> (run every multiply in NumPy)</li>
 </ul>
 
-<p>When the model processes the word "it" in our cat sentence, the Query for "it" is something like <em>"I need to know what noun I'm referring to."</em> The Key for "cat" is basically advertising <em>"I'm an animate noun, a subject."</em> The dot product between these two vectors is high — it's a match! — so "it" pays a lot of attention to "cat."</p>
-
-<h3>A Tiny Concrete Example</h3>
-
-<p>Let me make this super concrete. Imagine each word has a tiny 3-number vector (in reality it's 32 or 128 numbers, but bear with me):</p>
-
-<pre><span class="cm"># Imagine these are learned vectors (3 dimensions for simplicity)</span>
-Token <span class="st">"cat"</span> → Query = [<span class="nb">0.5</span>, <span class="nb">0.1</span>, <span class="nb">0.8</span>]   <span class="cm"># "I'm looking for subjects"</span>
-Token <span class="st">"sat"</span> → Key   = [<span class="nb">0.1</span>, <span class="nb">0.9</span>, <span class="nb">0.2</span>]   <span class="cm"># "I'm a verb"</span>
-Token <span class="st">"it"</span>  → Key   = [<span class="nb">0.6</span>, <span class="nb">0.2</span>, <span class="nb">0.7</span>]   <span class="cm"># "I'm a pronoun/subject"</span>
-
-<span class="cm"># Attention score = dot product of Query and Key</span>
-score(cat → sat) = <span class="nb">0.5</span>×<span class="nb">0.1</span> + <span class="nb">0.1</span>×<span class="nb">0.9</span> + <span class="nb">0.8</span>×<span class="nb">0.2</span> = <span class="nb">0.30</span>  <span class="cm"># Low match</span>
-score(cat → it)  = <span class="nb">0.5</span>×<span class="nb">0.6</span> + <span class="nb">0.1</span>×<span class="nb">0.2</span> + <span class="nb">0.8</span>×<span class="nb">0.7</span> = <span class="nb">0.88</span>  <span class="cm"># High match!</span></pre>
-
-<p>See that? "Cat" naturally pays way more attention to "it" (0.88) than to "sat" (0.30). And here's the beautiful part — the model <em>learns</em> these vectors during training. Nobody hand-codes the rules. It just figures out which words should match up.</p>
-
-<p>After computing these scores, it runs them through <strong>softmax</strong> (basically squashes the numbers into percentages that add up to 100%), then uses those percentages to blend the Value vectors together. So each word ends up with a new representation that's a weighted mix of the words it cared about. Pretty slick, right?</p>
+<p>The point isn’t “beat ChatGPT.” The point is: after an evening with this repo, attention, masking, and next-word training stop feeling mystical.</p>
 
 <div class="callout">
-    <strong>🤔 Why divide by √d?</strong> There's one more detail: the scores are divided by the square root of the vector dimension before softmax. Without this, the dot products can get really large, and softmax would essentially say "pay 100% attention to one word, 0% to everything else." The scaling keeps things smooth so the model can attend to <em>multiple</em> words at once.
+    <strong>Inspiration, not a copy.</strong> The <em>idea</em> of a tiny patterned-English GPT is floating around teaching materials. The code, comments, and wording here are original. The math (dot-product attention, GELU, layer norm) is standard public knowledge from transformer papers.
 </div>
 
-<h3>Multi-Head Attention: Looking at Things from Different Angles</h3>
+<h2>What the model is allowed to say</h2>
 
-<p>Now here's where things get even cooler. Instead of running one big attention computation, my model splits it into <strong>4 separate "heads"</strong> that all run in parallel.</p>
+<p>Every token is a whole word. No BPE. The full dictionary is:</p>
 
-<p>Why bother? Because language is complicated and one attention pattern isn't enough. One head might learn to track subjects ("who's doing the action?"). Another might figure out adjective-noun pairs. A third could focus on nearby words. It's like having four people read the same sentence, each looking for different things, then pooling their notes at the end.</p>
+<pre>the cat dog sat ran on mat house a big
+small quickly slowly and is red blue to PAD END</pre>
 
-<p>Here's the actual code from my model that does this:</p>
+<p>Training sentences are hand-written so three behaviors can emerge:</p>
 
-<pre><span class="kw">class</span> <span class="fn">CausalSelfAttention</span>(nn.Module):
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, cfg):
-        <span class="kw">super</span>().__init__()
-        self.n_heads = cfg.n_heads           <span class="cm"># 4 attention heads</span>
-        self.d_head = cfg.d_model // cfg.n_heads  <span class="cm"># 128/4 = 32 dims per head</span>
+<ol>
+    <li><strong>Size matching</strong> — <em>big</em> animals go with <em>big mat / big house</em></li>
+    <li><strong>Color as noise</strong> — <em>red</em> / <em>blue</em> appear, but shouldn’t pick the object by themselves</li>
+    <li><strong>Variety after “and”</strong> — <em>the cat and the dog</em> shows up more than repeating the same animal</li>
+</ol>
 
-        <span class="cm"># One matrix that produces Q, K, V all at once (efficient!)</span>
-        self.qkv_proj = nn.Linear(cfg.d_model, <span class="nb">3</span> * cfg.d_model, bias=<span class="kw">False</span>)
-        self.out_proj = nn.Linear(cfg.d_model, cfg.d_model, bias=<span class="kw">False</span>)
+<p>That’s enough structure for a tiny network to learn long-range attention without needing Wikipedia.</p>
 
-    <span class="kw">def</span> <span class="fn">forward</span>(self, x):
-        B, T, C = x.shape
-        <span class="cm"># Compute Q, K, V in a single matrix multiply</span>
-        qkv = self.qkv_proj(x)              <span class="cm"># (B, T, 3*C)</span>
-        q, k, v = qkv.chunk(<span class="nb">3</span>, dim=-<span class="nb">1</span>)      <span class="cm"># Split into Q, K, V</span>
+<h2>Attention in plain language</h2>
 
-        <span class="cm"># Reshape: split each into 4 heads of 32 dims</span>
-        q = q.view(B, T, self.n_heads, self.d_head).transpose(<span class="nb">1</span>, <span class="nb">2</span>)
-        k = k.view(B, T, self.n_heads, self.d_head).transpose(<span class="nb">1</span>, <span class="nb">2</span>)
-        v = v.view(B, T, self.n_heads, self.d_head).transpose(<span class="nb">1</span>, <span class="nb">2</span>)
+<p>Read: <em>“The big cat sat on the ___.”</em></p>
 
-        <span class="cm"># The magic formula: Attention(Q,K,V) = softmax(QK^T / √d) × V</span>
-        scale = math.sqrt(self.d_head)
-        attn = (q @ k.transpose(-<span class="nb">2</span>, -<span class="nb">1</span>)) / scale  <span class="cm"># Score matrix</span>
-        attn = attn.masked_fill(self.causal_mask[:T, :T], <span class="nb">float</span>(<span class="st">"-inf"</span>))
-        attn = F.softmax(attn, dim=-<span class="nb">1</span>)       <span class="cm"># Normalize to probabilities</span>
-        out = attn @ v                        <span class="cm"># Weighted sum of values</span>
-        <span class="cm">...</span></pre>
+<p>To fill the blank well, the model needs to remember <strong>big</strong> from earlier — not just the last word <strong>the</strong>. Attention is the mechanism that lets each word look back and decide “how much should I care about each earlier word?”</p>
 
-<p>I remember staring at this code and thinking: wait, <em>this</em> is the revolutionary idea that powers ChatGPT? A dot product, a mask, a softmax, and a matrix multiply? That's it? Yep. That's it. That's the whole magic trick.</p>
-
-<!-- ── 4. ARCHITECTURE OVERVIEW ───────────────────────────────────── -->
-<h2>The Full Architecture: How It All Fits Together</h2>
-
-<p>Alright, time to zoom out. My model is what's called a <strong>decoder-only transformer</strong> — same family as GPT-2, GPT-3, and LLaMA. Don't let the name intimidate you. "Decoder-only" just means it reads left to right and predicts the next word. That's all.</p>
-
-<p>Here's what the full data flow looks like:</p>
-
-<div class="arch-diagram">  Input: "Once upon a time" → Token IDs [42, 100, 7, 303]
-          │
-          ▼
-  ┌──────────────────────┐
-  │   Token Embedding     │  Look up a 128-dim vector for each word
-  │   + Position Embed    │  Add "where am I in the sentence?" info
-  └──────────┬───────────┘
-             │
-             │  × 4 Transformer Blocks
-  ┌──────────▼───────────┐
-  │   LayerNorm           │
-  │   Multi-Head Attn     │  Each word gathers context from past words
-  │   + Skip Connection   │
-  ├───────────────────────┤
-  │   LayerNorm           │
-  │   Feed-Forward (MLP)  │  Each word "thinks" about its context
-  │   + Skip Connection   │
-  └──────────┬───────────┘
-             │
-  ┌──────────▼───────────┐
-  │   Final LayerNorm     │
-  │   Linear → 4000 logits│  Score for every word in vocabulary
-  └──────────────────────┘
-          │
-          ▼
-  Output: probability distribution over next word</div>
-
-<p>A few things I want to call out here:</p>
+<p>For every word we build three vectors:</p>
 
 <ul>
-    <li><strong>Token Embeddings</strong> — basically a big lookup table. Each of our 4,000 vocabulary words gets its own 128-number vector. These get learned during training.</li>
-    <li><strong>Positional Embeddings</strong> — this one tripped me up at first. Since the Transformer sees all words at once (not one-by-one), without position info "cat sat mat" and "mat sat cat" would look identical. Positions fix that.</li>
-    <li><strong>Skip Connections</strong> (the "+" arrows) — honestly one of the cleverest ideas in deep learning. They let information flow straight through, so each block only needs to learn a small "correction." Without these, deep networks are basically impossible to train.</li>
-    <li><strong>Feed-Forward Network</strong> — expands each word's 128-dim vector to 512 dimensions, runs it through a nonlinear function (GELU), then squishes it back to 128. A lot of the model's "knowledge" lives here.</li>
+    <li><strong>Query</strong> — what am I looking for?</li>
+    <li><strong>Key</strong> — what do I advertise?</li>
+    <li><strong>Value</strong> — what content do I pass along if someone attends to me?</li>
 </ul>
 
-<h3>My Model's Specs</h3>
+<p>Score = how aligned Query and Key are (a dot product). Softmax turns scores into percentages. Then we mix Values with those percentages. That’s it.</p>
 
-<div class="stats">
-    <div class="stat-card"><span class="num">1.32M</span><span class="label">Parameters</span></div>
-    <div class="stat-card"><span class="num">4</span><span class="label">Transformer Layers</span></div>
-    <div class="stat-card"><span class="num">4</span><span class="label">Attention Heads</span></div>
-    <div class="stat-card"><span class="num">128</span><span class="label">Embedding Dim</span></div>
-    <div class="stat-card"><span class="num">4,000</span><span class="label">Vocab Size</span></div>
-    <div class="stat-card"><span class="num">128</span><span class="label">Context Window</span></div>
+<div class="callout">
+    <strong>Why divide by √d?</strong>
+    Without scaling, scores get huge as vector size grows. Softmax then becomes nearly “100% on one word.” Dividing by the square root of the head size keeps attention soft enough to blend several words.
 </div>
 
-<p>For some perspective: GPT-3 has <strong>175 billion</strong> parameters. Mine has 1.3 million. That's about 130,000× smaller. It's like comparing a paper airplane to a 747. But you know what? They both fly (sort of), and you learn way more about aerodynamics from folding paper than from staring at a jet engine.</p>
+<h3>The famous <code>-1e9</code> (causal mask)</h3>
 
-<!-- ── 5. TRAINING PROCESS ────────────────────────────────────────── -->
-<h2>Training: Watching a Model Learn</h2>
+<p>When predicting the next word, peeking at the future is cheating. So we build a triangular allow-mask:</p>
 
-<p>Training a language model is one of those things that's conceptually simple but took me a while to really <em>get</em>. The idea: show it a bunch of text, ask it to predict the next word, tell it how wrong it was, nudge the parameters to be less wrong. Do that a few hundred thousand times and hope for the best.</p>
+<pre>position i may look at 0..i only
 
-<p>Here's what the core loop looks like, stripped down:</p>
+1 0 0 0
+1 1 0 0
+1 1 1 0
+1 1 1 1</pre>
 
-<pre><span class="kw">for</span> step <span class="kw">in</span> <span class="fn">range</span>(max_steps):
-    input_ids, target_ids = get_batch()      <span class="cm"># Grab a chunk of text</span>
+<p>Where the mask is 0 (future), we add <strong><code>-1e9</code></strong> — negative one billion — to the attention score. After softmax, <code>e^(-1e9) ≈ 0</code>, so that future word gets ~0% attention.</p>
 
-    _, loss = model(input_ids, targets=target_ids)  <span class="cm"># Forward pass</span>
-    <span class="cm"># loss = how surprised the model is by the actual next word</span>
+<p>In PyTorch training we often use <code>-inf</code> for the same job. In NumPy inference, <code>-1e9</code> is a practical stand-in: strong enough to wipe the entry, usually safe in float32.</p>
 
-    optimizer.zero_grad()   <span class="cm"># Clear old gradients</span>
-    loss.backward()         <span class="cm"># Backprop: compute gradients</span>
-    optimizer.step()        <span class="cm"># Update all 1.3M parameters</span></pre>
+<pre><span class="cm"># from infer.py — mask future positions before softmax</span>
+logits = (q @ k.transpose(<span class="nb">0</span>, <span class="nb">2</span>, <span class="nb">1</span>)) / np.sqrt(hdim)
+logits = logits + (<span class="nb">1.0</span> - allow) * (-<span class="nb">1e9</span>)
+weights = _softmax(logits, axis=-<span class="nb">1</span>)</pre>
 
-<p>Every single step, the model sees 16 sequences of 128 tokens each (that's 2,048 tokens per step). Over 500 steps, it processes about <strong>1 million tokens</strong> total.</p>
+<h2>The whole architecture (tiny edition)</h2>
 
-<h3>The Learning Curve</h3>
+<div class="arch">words → ids
+  → token embedding + position embedding
+  → ×2 blocks:
+       LayerNorm → multi-head attention → residual add
+       LayerNorm → GELU MLP → residual add
+  → final LayerNorm → vocab logits
+  → pick next word, append, repeat</div>
 
-<p>I'm not gonna lie, I was glued to my terminal watching the numbers tick down. Here's what happened:</p>
-
-<table class="loss-table">
+<table>
     <thead>
-        <tr><th>Step</th><th>Train Loss</th><th>Val Loss</th><th>What's Happening</th></tr>
+        <tr><th>Knob</th><th>Value</th><th>Meaning</th></tr>
     </thead>
     <tbody>
-        <tr><td>25</td><td>7.89</td><td>—</td><td>Random noise — the model is clueless</td></tr>
-        <tr><td>100</td><td>5.52</td><td>5.69</td><td>Learning common words exist</td></tr>
-        <tr><td>200</td><td>4.54</td><td>5.07</td><td>Starting to pick up word patterns</td></tr>
-        <tr><td>300</td><td>4.23</td><td>4.94</td><td>Getting the hang of simple phrases</td></tr>
-        <tr><td>400</td><td>4.09</td><td>4.91</td><td>Improvement slowing down</td></tr>
-        <tr><td>500</td><td>4.05</td><td>4.90</td><td>Converging — needs more data/steps to improve</td></tr>
+        <tr><td>Vocab</td><td>20</td><td>Only these words exist</td></tr>
+        <tr><td>DIM</td><td>32</td><td>Numbers per word inside the net</td></tr>
+        <tr><td>Layers</td><td>2</td><td>Stacked transformer blocks</td></tr>
+        <tr><td>Heads</td><td>4</td><td>Parallel attention views (8 dims each)</td></tr>
+        <tr><td>Context</td><td>16</td><td>Max words per training example</td></tr>
+        <tr><td>Params</td><td>~26K</td><td>Laptop-friendly</td></tr>
     </tbody>
 </table>
 
-<div class="callout">
-    <strong>📊 What does the loss number mean?</strong> A loss of 7.89 at the start is close to <code>ln(4000) ≈ 8.29</code>, which is what you'd get from purely random guessing over a 4,000-word vocabulary. By step 500, the loss dropped to ~4.05, meaning the model is doing significantly better than random — but it's still pretty confused. To put it another way: a loss of 4.05 means the model's effective vocabulary at each prediction is about <code>e^4.05 ≈ 57</code> words. Not great, but way better than 4,000!
+<p>Residuals (the <code>x = x + …</code> lines) matter more than they look. Each block only has to learn a small update on top of the old signal, which keeps deep stacks trainable.</p>
+
+<h2>Training: nudge until the demos pass</h2>
+
+<p>Training is next-word prediction:</p>
+
+<pre><span class="cm"># sentence: the big cat END</span>
+<span class="cm"># input:    the  big  cat</span>
+<span class="cm"># target:   big  cat  END</span></pre>
+
+<p>The loop in <code>train.py</code> is deliberately short:</p>
+
+<pre><span class="kw">for</span> each batch:
+    logits, loss = model(inputs, targets)  <span class="cm"># how surprised are we?</span>
+    loss.backward()                        <span class="cm"># who to blame?</span>
+    optimizer.step()                       <span class="cm"># nudge weights</span></pre>
+
+<p>Every 50 steps we run four smoke tests. When they all pass, we export <code>models/tiny_english_gpt.npz</code> for NumPy inference. On my machine that usually happens around a couple hundred steps.</p>
+
+<h2>Results you can verify</h2>
+
+<p>This is the part I care about for teaching: the outputs aren’t random mush. Greedy decoding does this:</p>
+
+<div class="demo">
+    <span class="prompt">Prompt:</span> the big cat sat on the<br>
+    <strong>Continuation:</strong> big mat END
+</div>
+<div class="demo">
+    <span class="prompt">Prompt:</span> the red big cat sat on the<br>
+    <strong>Continuation:</strong> big mat END <em>(color ignored; size used)</em>
+</div>
+<div class="demo">
+    <span class="prompt">Prompt:</span> the cat and the<br>
+    <strong>Continuation:</strong> dog END
+</div>
+<div class="demo">
+    <span class="prompt">Prompt:</span> the small dog ran to the small<br>
+    <strong>Continuation:</strong> house END
 </div>
 
-<p>One thing that bugged me: see how the training loss (4.05) and validation loss (4.90) keep drifting apart? That's overfitting — the model was starting to just memorize the training stories instead of learning general patterns about English. Makes total sense when you think about it: with only ~1M tokens of data, there just isn't enough variety to generalize from.</p>
+<p>Those four lines are why the corpus is patterned. You’re watching attention reach backward, ignore distractors, and complete a structure — at a scale you can hold in your head.</p>
 
-<!-- ── 6. RESULTS ─────────────────────────────────────────────────── -->
-<h2>Results: What Does This Thing Actually Produce?</h2>
-
-<p>Alright, moment of truth. I was genuinely nervous hitting enter on that first generate command. Would it produce something cool? Something embarrassing? Let me just show you the raw, unfiltered output:</p>
-
-<div class="gen-example">
-    <span class="prompt">Prompt:</span> "Once upon a time"<br><br>
-    <strong>Output:</strong> Once upon a time Sit decor irled roll hospit Sit escape forwar endar endar island Sit escape Sit shone enve gest escape forwar asure feet Sit bigger Sit shone Sit notice forwar isdom escape Sit belt escape …
-</div>
-
-<div class="gen-example">
-    <span class="prompt">Prompt:</span> "The king"<br><br>
-    <strong>Output:</strong> The king exer bigger Sit asure notice forwar locked forwar Sit endar saved Sit roll Sit ! Sit decor cannot Sit island Sit belt Sit G isdom Sit seem escape Sit …
-</div>
-
-<p>Yeah... not exactly Shakespeare. 😄 I laughed, honestly. But then I looked more carefully and realized it <em>had</em> actually learned some stuff:</p>
+<h2>Two files, two jobs</h2>
 
 <ul>
-    <li>It picked up real English tokens — "escape," "bigger," "cannot," "island," "notice," "saved"</li>
-    <li>It learned that certain tokens tend to appear together (you can see it has "favorite" tokens it likes to repeat)</li>
-    <li>It sometimes places punctuation marks ("!", "'", ",") in plausible spots</li>
-    <li>The BPE sub-word tokens are visible: "forwar" (forward), "hospit" (hospital), "endar" (calendar?) — it learned the vocabulary but can't quite string them into meaning yet</li>
+    <li><code>train.py</code> — vocabulary, hand-built sentences, PyTorch model, training loop, export <code>.npz</code>. Start here.</li>
+    <li><code>infer.py</code> — load the weights and run the forward pass in NumPy only. Read the <code>-1e9</code> note at the top.</li>
 </ul>
 
-<p>So what's going on? The model trained for only 500 steps on a tiny dataset. It picked up that language has structure — certain tokens follow other tokens in patterns — but 500 steps just wasn't enough for it to learn actual <em>meaning</em>. If I wanted coherent text, I'd need way more training steps (like 2,000–5,000), more data, and probably a bigger model. But for a first attempt? I was honestly kind of proud of it.</p>
+<pre>pip install -r requirements.txt
+python train.py
+python infer.py</pre>
+
+<p>Repo: <a href="https://github.com/brunotaboada/small-llm-from-scratch">github.com/brunotaboada/small-llm-from-scratch</a></p>
+
+<h2>What I actually learned</h2>
+
+<ul>
+    <li><strong>Transformers aren’t magic</strong> — embeddings, attention, MLP, residuals, repeat.</li>
+    <li><strong>Masking is a teaching moment</strong> — once <code>-1e9</code> / <code>-inf</code> clicks, “causal LM” stops being jargon.</li>
+    <li><strong>Tiny data can teach real behaviors</strong> if you design the patterns on purpose.</li>
+    <li><strong>Separate train vs infer</strong> makes the story clearer: autograd to learn, NumPy to see every multiply.</li>
+</ul>
 
 <div class="callout warn">
-    <strong>🎯 Key insight:</strong> This is actually <em>exactly</em> how the big models work too — they just do it with 100,000× more parameters and 1,000,000× more data. The learning process is fundamentally the same. GPT-4 didn't learn differently; it just learned <em>more</em>.
+    <strong>Honest limit:</strong> this model only knows 20 words. Type anything outside the vocab and it can’t help you. That’s a feature for learning — you see the vocabulary wall immediately.
 </div>
 
-<!-- ── 7. KEY CODE SNIPPETS ───────────────────────────────────────── -->
-<h2>Under the Hood: Key Code Explained</h2>
+<h2>If you’re stuck</h2>
 
-<p>I want to show you a few pieces of the code that made me go "ohhhh, <em>that's</em> how it works."</p>
+<p>Read <code>train.py</code> top to bottom, then <code>infer.py</code>. When a constant looks spooky (<code>-1e9</code>, <code>1e-5</code>, <code>1/sqrt(d)</code>), the comment above it is there on purpose.</p>
 
-<h3>The Heart of the Model</h3>
-
-<p>The <code>SmallGPT</code> class ties everything together. What surprised me is how clean it is:</p>
-
-<pre><span class="kw">class</span> <span class="fn">SmallGPT</span>(nn.Module):
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, cfg):
-        <span class="kw">super</span>().__init__()
-        <span class="cm"># Step 1: Convert token IDs → vectors</span>
-        self.token_emb = nn.Embedding(cfg.vocab_size, cfg.d_model)
-        <span class="cm"># Step 2: Add position information</span>
-        self.pos_emb = LearnedPositionalEmbedding(cfg.max_seq_len, cfg.d_model)
-        <span class="cm"># Step 3: Stack transformer blocks</span>
-        self.blocks = nn.ModuleList([
-            TransformerBlock(cfg) <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(cfg.n_layers)  <span class="cm"># 4 blocks</span>
-        ])
-        <span class="cm"># Step 4: Final projection to vocabulary</span>
-        self.ln_f = nn.LayerNorm(cfg.d_model)
-        self.lm_head = nn.Linear(cfg.d_model, cfg.vocab_size, bias=<span class="kw">False</span>)
-        <span class="cm"># Neat trick: share weights between embedding and output</span>
-        self.lm_head.weight = self.token_emb.weight</pre>
-
-<p>That last line — <strong>weight tying</strong> — blew my mind a little. The token embedding converts words→vectors, and the output layer converts vectors→word-scores. They're doing opposite things, so you'd think they need separate weights. But it turns out sharing them saves ~500K parameters and actually makes the model work <em>better</em>. GPT-2 does this too. When I first read about it I thought it was a hack, but the more I think about it the more it makes sense.</p>
-
-<h3>The Causal Mask: No Cheating Allowed</h3>
-
-<p>This one's fun. During training, the model sees the full sentence at once — but we can't let it cheat by peeking at future words it hasn't "generated" yet. So how do you prevent a model from looking ahead? A triangular mask:</p>
-
-<pre><span class="cm"># Create a mask where True = "block this position"</span>
-mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=<span class="nb">1</span>).bool()
-
-<span class="cm"># Visualized for seq_len=4:</span>
-<span class="cm">#   Position:     0      1      2      3</span>
-<span class="cm"># Word 0:   [  OK    BLOCK  BLOCK  BLOCK ]  ← can only see itself</span>
-<span class="cm"># Word 1:   [  OK     OK    BLOCK  BLOCK ]  ← sees words 0,1</span>
-<span class="cm"># Word 2:   [  OK     OK     OK    BLOCK ]  ← sees words 0,1,2</span>
-<span class="cm"># Word 3:   [  OK     OK     OK     OK   ]  ← sees everything</span></pre>
-
-<p>Those masked positions get set to negative infinity before softmax, which makes them exactly 0% attention. Information only flows from past to present — never the other direction. At first I thought this was a weird trick, but it's actually really elegant when you sit with it for a minute.</p>
-
-<h3>Learning Rate Warmup + Cosine Decay</h3>
-
-<p>Before this project, I figured learning rate was just... a number you set and forget. Nope. It turns out the <em>schedule</em> matters a lot — maybe more than the actual value. Here's what I used:</p>
-
-<pre><span class="kw">def</span> <span class="fn">get_lr</span>(step, cfg):
-    <span class="cm"># Phase 1: Warmup (steps 0-50) — start gentle</span>
-    <span class="kw">if</span> step < cfg.warmup_steps:
-        <span class="kw">return</span> cfg.learning_rate * (step / cfg.warmup_steps)
-
-    <span class="cm"># Phase 2: Cosine decay (steps 50-500) — gradually slow down</span>
-    progress = (step - cfg.warmup_steps) / (cfg.max_steps - cfg.warmup_steps)
-    min_lr = cfg.learning_rate * <span class="nb">0.1</span>  <span class="cm"># Never go below 10% of peak</span>
-    <span class="kw">return</span> min_lr + <span class="nb">0.5</span> * (cfg.learning_rate - min_lr) * (<span class="nb">1</span> + math.cos(math.pi * progress))</pre>
-
-<p>Think of it like driving: you ease onto the highway (warmup), cruise at full speed (peak learning rate), then gradually slow down as you approach your exit (cosine decay). I tried skipping the warmup once — just went straight to the full learning rate — and the loss went completely haywire. Lesson learned.</p>
-
-<!-- ── 8. VISUALS ─────────────────────────────────────────────────── -->
-<h2>Visualizing the Training Process</h2>
-
-<p>I'm a sucker for charts, so obviously I had to plot the loss curve. Here's the training journey:</p>
-
-<div style="background:#f8f8f8; padding:1.5rem; border-radius:10px; margin:1.5rem 0;">
-    <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg" style="width:100%; max-width:600px; display:block; margin:0 auto;">
-        <!-- Grid -->
-        <defs>
-            <linearGradient id="trainGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" style="stop-color:#6c63ff;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#6c63ff;stop-opacity:1" />
-            </linearGradient>
-            <linearGradient id="valGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" style="stop-color:#e91e8c;stop-opacity:1" />
-                <stop offset="100%" style="stop-color:#e91e8c;stop-opacity:1" />
-            </linearGradient>
-        </defs>
-
-        <!-- Background -->
-        <rect x="60" y="20" width="510" height="230" fill="#fff" rx="4"/>
-        
-        <!-- Grid lines -->
-        <g stroke="#eee" stroke-width="1">
-            <line x1="60" y1="78" x2="570" y2="78"/>
-            <line x1="60" y1="136" x2="570" y2="136"/>
-            <line x1="60" y1="194" x2="570" y2="194"/>
-        </g>
-
-        <!-- Y axis labels -->
-        <g font-size="11" fill="#888" text-anchor="end" font-family="sans-serif">
-            <text x="55" y="25">8.0</text>
-            <text x="55" y="83">7.0</text>
-            <text x="55" y="141">6.0</text>
-            <text x="55" y="199">5.0</text>
-            <text x="55" y="254">4.0</text>
-        </g>
-
-        <!-- X axis labels -->
-        <g font-size="11" fill="#888" text-anchor="middle" font-family="sans-serif">
-            <text x="60" y="270">0</text>
-            <text x="162" y="270">100</text>
-            <text x="264" y="270">200</text>
-            <text x="366" y="270">300</text>
-            <text x="468" y="270">400</text>
-            <text x="570" y="270">500</text>
-        </g>
-
-        <!-- Train loss line (actual data points) -->
-        <!-- Steps: 25,50,75,100,125,150,175,200,225,250,275,300,325,350,375,400,425,450,475,500 -->
-        <!-- Loss:  7.89,7.06,6.05,5.52,5.16,4.89,4.67,4.54,4.45,4.35,4.27,4.23,4.20,4.14,4.10,4.09,4.09,4.08,4.05,4.05 -->
-        <!-- Y mapping: loss 4.0 → y=250, loss 8.0 → y=20. Scale: y = 250 - (loss-4.0)*57.5 -->
-        <!-- X mapping: step/500 * 510 + 60 -->
-        <polyline points="
-            85.5,26.3 111,74.1 136.5,132.1 162,162.6 187.5,183.3 213,185.7 
-            238.5,197.3 264,206.8 289.5,212 315,215.9 340.5,219.4 
-            366,221.8 391.5,223.5 417,224.1 442.5,225.3 468,226.1 
-            493.5,226.1 519,227.1 544.5,228.7 570,228.5
-        " fill="none" stroke="#6c63ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-
-        <!-- Val loss line (actual data points) -->
-        <!-- Steps: 100, 200, 300, 400, 500 -->
-        <!-- Loss: 5.69, 5.07, 4.94, 4.91, 4.90 -->
-        <polyline points="
-            162,152.8 264,188.5 366,196 468,197.7 570,198.3
-        " fill="none" stroke="#e91e8c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8,4"/>
-
-        <!-- Dots on val loss -->
-        <g fill="#e91e8c">
-            <circle cx="162" cy="152.8" r="4"/>
-            <circle cx="264" cy="188.5" r="4"/>
-            <circle cx="366" cy="196" r="4"/>
-            <circle cx="468" cy="197.7" r="4"/>
-            <circle cx="570" cy="198.3" r="4"/>
-        </g>
-
-        <!-- Legend -->
-        <line x1="350" y1="12" x2="375" y2="12" stroke="#6c63ff" stroke-width="2.5"/>
-        <text x="380" y="16" font-size="11" fill="#555" font-family="sans-serif">Train Loss</text>
-        <line x1="460" y1="12" x2="485" y2="12" stroke="#e91e8c" stroke-width="2.5" stroke-dasharray="8,4"/>
-        <text x="490" y="16" font-size="11" fill="#555" font-family="sans-serif">Val Loss</text>
-
-        <!-- Axis labels -->
-        <text x="315" y="295" font-size="12" fill="#555" text-anchor="middle" font-family="sans-serif">Training Steps</text>
-        <text x="15" y="140" font-size="12" fill="#555" text-anchor="middle" font-family="sans-serif" transform="rotate(-90, 15, 140)">Loss</text>
-    </svg>
-    <p style="text-align:center; font-size:0.85rem; color:#777; margin-top:0.5rem; font-family:sans-serif;">Training and validation loss over 500 steps. The steep early drop is the model learning basic vocabulary patterns.</p>
-</div>
-
-<p>See that steep cliff in the first 100 steps? That's the model going from "I literally have no idea what English is" to "oh wait, some words show up way more than others." After that initial burst, progress slows way down. Totally normal — you'd see the exact same shape if you were training GPT-4, just over way more steps.</p>
-
-<!-- ── 9. LESSONS LEARNED ─────────────────────────────────────────── -->
-<h2>Lessons I Learned Along the Way</h2>
-
-<p>This project taught me a bunch of things I really didn't expect. Some of these might seem obvious in hindsight, but they hit different when you discover them by breaking stuff.</p>
-
-<p><strong>1. Transformers are simpler than I thought.</strong> Seriously. I spent weeks being intimidated before I actually looked at the code. The core idea — Q, K, V attention — is just dot products and softmax. That's it. The genius isn't in any single piece; it's in how the simple pieces stack together.</p>
-
-<p><strong>2. Data > model size.</strong> My model's biggest problem wasn't having only 1.3M parameters — it was the tiny dataset. Even a small model can produce decent output if you feed it enough diverse data. GPT-3 isn't magic; it's just very, very well-fed.</p>
-
-<p><strong>3. Tokenization is half the battle</strong> and I almost overlooked it entirely. Before text even reaches the model, the BPE tokenizer chops it into sub-word tokens. How well those tokens capture meaningful chunks of language has a massive impact on everything downstream.</p>
-
-<p><strong>4. Loss numbers make no intuitive sense at first.</strong> Going from 8.0 to 4.0 sounds like "cutting the error in half." In reality it means going from "random guessing" to "can narrow things down to about 57 plausible words." The log scale took me embarrassingly long to internalize.</p>
-
-<p><strong>5. Don't skip the learning rate warmup.</strong> Ask me how I know. (I skipped it. The loss exploded. Fun times.) The warmup + cosine decay schedule that everyone uses isn't some ritual — it's actually critical for stable training.</p>
-
-<p><strong>6. Weight tying is one of those ideas that seems wrong until it's obviously right.</strong> Sharing weights between the embedding layer and the output layer saves ~500K parameters AND improves performance. The intuition clicked for me when I realized: words that are similar should have similar embeddings AND similar output probabilities. Of course they should share weights.</p>
-
-<div class="callout">
-    <strong>💡 My #1 tip if you're just starting:</strong> Don't try to understand everything before you start coding. Just build it, run it, watch the loss go down. <em>Then</em> go back and read the code more carefully. I promise it'll make 10x more sense after you've seen it work.
-</div>
-
-<!-- ── 10. CALL TO ACTION ─────────────────────────────────────────── -->
-<h2>Your Turn: Try It Yourself!</h2>
-
-<p>The whole thing is open source and I'd genuinely love it if you gave it a shot. I commented the heck out of the code (mostly for future-me who will definitely forget how all this works in a month), so you can basically read it like a tutorial.</p>
-
-<p><strong>Getting started takes like 5 minutes:</strong></p>
-
-<ol>
-    <li>Clone the repo and install dependencies (just PyTorch + tokenizers)</li>
-    <li>Train the tokenizer: <code>python train_tokenizer.py</code></li>
-    <li>Train the model: <code>python train.py</code> (takes ~1-2 minutes on CPU!)</li>
-    <li>Generate text: <code>python generate.py --prompt "Once upon a time"</code></li>
-    <li>Explore the Jupyter notebook for a deep-dive walkthrough</li>
-</ol>
-
-<p>Once it's running, here are some fun experiments to try:</p>
-<ul>
-    <li>Crank <code>max_steps</code> up to 2000 or 5000 and watch the output get noticeably better</li>
-    <li>Bump <code>d_model</code> from 128 to 256 — the parameter count quadruples (math is wild)</li>
-    <li>Swap in a completely different dataset. What happens with Shakespeare? Song lyrics? Python code?</li>
-    <li>Mess with the generation temperature — 0.3 gives you boring-but-safe output, 1.5 gives you creative chaos</li>
-</ul>
-
-<p style="text-align:center; margin: 2.5rem 0 1.5rem;">
-    <a href="https://github.com/brunotaboada/small-llm-from-scratch" class="cta">⭐ View on GitHub</a>
-</p>
-
-<p style="text-align:center; color:var(--text-muted); font-family: -apple-system, sans-serif; font-size:0.92rem;">
-    If this helped you understand how LLMs work, give the repo a star — it means a lot!<br>
-    Questions or ideas? Open an issue on GitHub. Happy building! 🚀
-</p>
+<p>You don’t need a cluster. You need curiosity and a terminal.</p>
 
 </article>
 
 <footer>
-    Built with curiosity, PyTorch, and way too many print() statements at 2am.
+    Tiny GPT · train in PyTorch · infer in NumPy · built to be readable
 </footer>
 
 </body>
