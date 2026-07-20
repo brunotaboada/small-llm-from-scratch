@@ -166,6 +166,12 @@ def numpy_forward(token_ids: list[int], w: np.lib.npyio.NpzFile) -> np.ndarray:
       logits[t, v] = score for vocab word v being the next word after position t
     """
     t = len(token_ids)
+    ctx = len(w["pos_embed.weight"])
+    if t > ctx:
+        raise ValueError(
+            f"sequence length {t} exceeds context window {ctx} "
+            f"(only {ctx} position embeddings were trained)"
+        )
     # Embed words, then add a learned vector for each position 0..t-1
     x = w["token_embed.weight"][token_ids] + w["pos_embed.weight"][:t]
 
@@ -202,14 +208,35 @@ def continue_prompt(
       We divide logits by temperature before softmax.
       Smaller temperature → sharper distribution → safer/more boring picks.
     """
-    ids = [vocab.index(tok) for tok in prompt.split() if tok in vocab]
-    if not ids:
-        print(f"skipped (unknown words): {prompt!r}\n")
+    known = set(vocab)
+    tokens = prompt.split()
+    unknown = sorted({tok for tok in tokens if tok not in known})
+    if unknown:
+        # Don't silently drop typos — that hides mistakes from beginners.
+        print(
+            f"skipped (unknown words {unknown}): {prompt!r}\n"
+            f"  known vocab: {vocab}\n"
+        )
+        return
+    if not tokens:
+        print(f"skipped (empty prompt)\n")
+        return
+
+    ids = [vocab.index(tok) for tok in tokens]
+    ctx = len(w["pos_embed.weight"])
+    if len(ids) > ctx:
+        print(
+            f"skipped (prompt has {len(ids)} words; context window is {ctx}): "
+            f"{prompt!r}\n"
+        )
         return
 
     print(f"> {prompt}")
     text = prompt
     for step in range(steps):
+        if len(ids) > ctx:
+            print(f"  stopped — reached context window ({ctx} words)")
+            break
         logits = numpy_forward(ids, w)[-1]  # scores for the NEXT word only
         if temperature <= 0:
             probs = _softmax(logits)
