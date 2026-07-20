@@ -40,6 +40,17 @@ WEIGHTS_FILE = Path(__file__).resolve().parent / "models" / "tiny_english_gpt.np
 # PyTorch training uses -inf for the same idea; NumPy code often uses -1e9.
 
 
+def _linear_w(w: np.lib.npyio.NpzFile, key: str) -> np.ndarray:
+    """
+    Weight matrix ready for `x @ W` (row vectors).
+
+    PyTorch `nn.Linear` stores weight as [out_features, in_features].
+    NumPy matmul wants [in, out], so we transpose once here — call sites
+    never sprinkle `.T` themselves.
+    """
+    return w[key].T
+
+
 def _gelu(x: np.ndarray) -> np.ndarray:
     """
     GELU = smooth cousin of ReLU.
@@ -92,12 +103,12 @@ def _attend(
 
     allow: shape (time, time), 1 = allowed, 0 = forbidden (future).
     We turn 0s into -1e9 so softmax ignores those cells (see file header).
+
+    wq/wk/wv/wo are already [in, out] from `_linear_w` — use as `x @ W`.
     """
     t, d = x.shape
     hdim = d // n_heads
 
-    # PyTorch Linear stores weight as [out, in]. We saved it that way.
-    # x @ W.T is the usual "row vector times weight" multiply.
     q = (x @ wq).reshape(t, n_heads, hdim).transpose(1, 0, 2)
     k = (x @ wk).reshape(t, n_heads, hdim).transpose(1, 0, 2)
     v = (x @ wv).reshape(t, n_heads, hdim).transpose(1, 0, 2)
@@ -129,10 +140,10 @@ def _one_layer(
     a = _layernorm(x, w[f"{p}.norm1.weight"], w[f"{p}.norm1.bias"])
     x = x + _attend(
         a,
-        w[f"{p}.attn.W_q.weight"].T,
-        w[f"{p}.attn.W_k.weight"].T,
-        w[f"{p}.attn.W_v.weight"].T,
-        w[f"{p}.attn.W_o.weight"].T,
+        _linear_w(w, f"{p}.attn.W_q.weight"),
+        _linear_w(w, f"{p}.attn.W_k.weight"),
+        _linear_w(w, f"{p}.attn.W_v.weight"),
+        _linear_w(w, f"{p}.attn.W_o.weight"),
         n_heads,
         allow,
     )
@@ -140,9 +151,9 @@ def _one_layer(
     a = _layernorm(x, w[f"{p}.norm2.weight"], w[f"{p}.norm2.bias"])
     return x + _mlp(
         a,
-        w[f"{p}.ff.linear1.weight"].T,
+        _linear_w(w, f"{p}.ff.linear1.weight"),
         w[f"{p}.ff.linear1.bias"],
-        w[f"{p}.ff.linear2.weight"].T,
+        _linear_w(w, f"{p}.ff.linear2.weight"),
         w[f"{p}.ff.linear2.bias"],
     )
 
@@ -171,7 +182,8 @@ def numpy_forward(token_ids: list[int], w: np.lib.npyio.NpzFile) -> np.ndarray:
         x = _one_layer(x, w, i, n_heads, allow)
 
     x = _layernorm(x, w["ln_f.weight"], w["ln_f.bias"])
-    return x @ w["lm_head.weight"].T
+    # lm_head is also an nn.Linear weight [vocab, dim] → transpose via helper
+    return x @ _linear_w(w, "lm_head.weight")
 
 
 def continue_prompt(
