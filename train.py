@@ -229,8 +229,20 @@ def export_weights(model: TinyGPT) -> None:
     print(f"wrote {WEIGHTS_FILE}")
 
 
+def batches(
+    data: list[tuple[list[int], list[int]]], size: int = 32
+) -> list[list[tuple[list[int], list[int]]]]:
+    """
+    Split examples into fixed-size groups for one optimizer step each.
+
+    We only keep full batches (drop a short leftover at the end) so every
+    step sees the same batch size — simpler than padding a partial batch.
+    """
+    return [data[i : i + size] for i in range(0, len(data) - size + 1, size)]
+
+
 def passes_smoke_tests(model: TinyGPT) -> bool:
-    """Stop early once the four teaching demos work with greedy decoding."""
+    """True when the four teaching demos work with greedy decoding."""
     cases = [
         ("the big cat sat on the", ("big", "mat")),
         ("the red big cat sat on the", ("big", "mat")),
@@ -253,26 +265,29 @@ def passes_smoke_tests(model: TinyGPT) -> bool:
     return True
 
 
-def train(max_steps: int = 800) -> None:
+def train(max_steps: int = 800, smoke_streak_needed: int = 2) -> None:
     """
     Loop:
       take a batch → forward → loss → backward → update weights
-    Every 50 steps, check demos; save .npz when they pass.
+    Every 50 steps, check demos; save .npz after they pass a few times
+    in a row (avoids exporting on a one-off lucky check).
     """
     torch.manual_seed(42)
     random.seed(42)
-    # Repeat the small corpus so each step still sees those patterns often
-    data = [to_train_example(s) for _ in range(40) for s in build_corpus()]
+    # Tiny handmade corpus (~dozens of sentences). Repeat it so each training
+    # step still sees those patterns often after we shuffle into batches of 32.
+    corpus = build_corpus()
+    data = [to_train_example(s) for _ in range(40) for s in corpus]
     model = TinyGPT()
     opt = torch.optim.AdamW(model.parameters(), lr=3e-3)
     n = sum(p.numel() for p in model.parameters())
     print(f"training tiny gpt ({n:,} parameters)...")
 
     step = 0
+    smoke_streak = 0
     while step < max_steps:
         random.shuffle(data)
-        for i in range(0, len(data) - 31, 32):
-            batch = data[i : i + 32]
+        for batch in batches(data, size=32):
             xb = torch.tensor([p[0] for p in batch])
             yb = torch.tensor([p[1] for p in batch])
             _, loss = model(xb, yb)
@@ -283,9 +298,16 @@ def train(max_steps: int = 800) -> None:
             if step % 50 == 0:
                 print(f"  step {step:4d}  loss {loss.item():.3f}")
                 if passes_smoke_tests(model):
-                    print("  smoke tests ok — exporting weights")
-                    export_weights(model)
-                    return
+                    smoke_streak += 1
+                    print(
+                        f"  smoke tests ok ({smoke_streak}/{smoke_streak_needed})"
+                    )
+                    if smoke_streak >= smoke_streak_needed:
+                        print("  streak met — exporting weights")
+                        export_weights(model)
+                        return
+                else:
+                    smoke_streak = 0
             if step >= max_steps:
                 break
     export_weights(model)
